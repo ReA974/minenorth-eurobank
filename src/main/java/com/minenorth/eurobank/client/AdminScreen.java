@@ -1,9 +1,9 @@
 package com.minenorth.eurobank.client;
 
-import com.minenorth.eurobank.AdminListPacket;
-import com.minenorth.eurobank.AdminListPacket.Entry;
-import com.minenorth.eurobank.AdminPacket;
-import com.minenorth.eurobank.AdminPacket.Op;
+import com.minenorth.eurobank.packet.AdminListPacket;
+import com.minenorth.eurobank.packet.AdminListPacket.Entry;
+import com.minenorth.eurobank.packet.AdminPacket;
+import com.minenorth.eurobank.packet.AdminPacket.Op;
 import com.minenorth.eurobank.Money;
 import com.minenorth.eurobank.Network;
 import net.minecraft.ChatFormatting;

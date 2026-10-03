@@ -1,5 +1,8 @@
-package com.minenorth.eurobank;
+package com.minenorth.eurobank.items;
 
+import com.minenorth.eurobank.Denomination;
+import com.minenorth.eurobank.EuroBank;
+import com.minenorth.eurobank.blocks.ModBlocks;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraftforge.registries.DeferredRegister;

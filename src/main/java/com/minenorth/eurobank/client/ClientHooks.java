@@ -1,7 +1,7 @@
 package com.minenorth.eurobank.client;
 
-import com.minenorth.eurobank.AdminListPacket;
-import com.minenorth.eurobank.StatePacket;
+import com.minenorth.eurobank.packet.AdminListPacket;
+import com.minenorth.eurobank.packet.StatePacket;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;

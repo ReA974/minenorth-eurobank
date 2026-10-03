@@ -1,5 +1,7 @@
 package com.minenorth.eurobank;
 
+import com.minenorth.eurobank.blocks.ModBlocks;
+import com.minenorth.eurobank.items.ModItems;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;

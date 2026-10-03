@@ -1,5 +1,6 @@
-package com.minenorth.eurobank;
+package com.minenorth.eurobank.items;
 
+import com.minenorth.eurobank.Money;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;

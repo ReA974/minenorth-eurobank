@@ -1,11 +1,11 @@
 package com.minenorth.eurobank.client;
 
-import com.minenorth.eurobank.ActionPacket;
-import com.minenorth.eurobank.ActionPacket.Action;
-import com.minenorth.eurobank.AdminPacket;
+import com.minenorth.eurobank.packet.ActionPacket;
+import com.minenorth.eurobank.packet.ActionPacket.Action;
+import com.minenorth.eurobank.packet.AdminPacket;
 import com.minenorth.eurobank.Money;
 import com.minenorth.eurobank.Network;
-import com.minenorth.eurobank.StatePacket;
+import com.minenorth.eurobank.packet.StatePacket;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;

@@ -1,5 +1,7 @@
 package com.minenorth.eurobank;
 
+import com.minenorth.eurobank.items.ModItems;
+import com.minenorth.eurobank.items.MoneyItem;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;

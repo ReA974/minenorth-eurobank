@@ -1,6 +1,9 @@
-package com.minenorth.eurobank;
+package com.minenorth.eurobank.packet;
 
+import com.minenorth.eurobank.BankData;
+import com.minenorth.eurobank.Money;
 import com.minenorth.eurobank.client.ClientHooks;
+import com.minenorth.eurobank.items.BankCardItem;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.api.distmarker.Dist;

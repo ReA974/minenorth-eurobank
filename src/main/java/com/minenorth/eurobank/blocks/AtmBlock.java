@@ -1,5 +1,6 @@
-package com.minenorth.eurobank;
+package com.minenorth.eurobank.blocks;
 
+import com.minenorth.eurobank.Network;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;

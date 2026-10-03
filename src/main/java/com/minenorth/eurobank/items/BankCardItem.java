@@ -1,4 +1,4 @@
-package com.minenorth.eurobank;
+package com.minenorth.eurobank.items;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
