@@ -1,0 +1,20 @@
+{
+  "itemGroup.eurobank": "Euro Bank",
+  "block.eurobank.atm": "ATM",
+  "item.eurobank.bank_card": "Bank Card",
+  "item.eurobank.coin_1c": "1 Cent Coin",
+  "item.eurobank.coin_2c": "2 Cent Coin",
+  "item.eurobank.coin_5c": "5 Cent Coin",
+  "item.eurobank.coin_10c": "10 Cent Coin",
+  "item.eurobank.coin_20c": "20 Cent Coin",
+  "item.eurobank.coin_50c": "50 Cent Coin",
+  "item.eurobank.coin_1e": "1 Euro Coin",
+  "item.eurobank.coin_2e": "2 Euro Coin",
+  "item.eurobank.bill_5e": "5 Euro Bill",
+  "item.eurobank.bill_10e": "10 Euro Bill",
+  "item.eurobank.bill_20e": "20 Euro Bill",
+  "item.eurobank.bill_50e": "50 Euro Bill",
+  "item.eurobank.bill_100e": "100 Euro Bill",
+  "item.eurobank.bill_200e": "200 Euro Bill",
+  "item.eurobank.bill_500e": "500 Euro Bill"
+}
