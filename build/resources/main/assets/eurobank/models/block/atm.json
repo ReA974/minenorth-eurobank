@@ -1,8 +1,0 @@
-{
-  "parent": "minecraft:block/orientable",
-  "textures": {
-    "top": "eurobank:block/atm_top",
-    "front": "eurobank:block/atm_front",
-    "side": "eurobank:block/atm_side"
-  }
-}
