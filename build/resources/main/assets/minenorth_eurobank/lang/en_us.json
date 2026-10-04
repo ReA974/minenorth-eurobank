@@ -1,0 +1,21 @@
+{
+  "itemGroup.minenorth_eurobank": "MineNorthRP - Banque",
+  "block.minenorth_eurobank.atm": "Distributeur MineNorth Bank",
+  "item.minenorth_eurobank.bank_card": "Carte bancaire",
+  "item.minenorth_eurobank.coin_1c": "Pièce de 1 centime",
+  "item.minenorth_eurobank.coin_2c": "Pièce de 2 centimes",
+  "item.minenorth_eurobank.coin_5c": "Pièce de 5 centimes",
+  "item.minenorth_eurobank.coin_10c": "Pièce de 10 centimes",
+  "item.minenorth_eurobank.coin_20c": "Pièce de 20 centimes",
+  "item.minenorth_eurobank.coin_50c": "Pièce de 50 centimes",
+  "item.minenorth_eurobank.coin_1e": "Pièce de 1 euro",
+  "item.minenorth_eurobank.coin_2e": "Pièce de 2 euros",
+  "item.minenorth_eurobank.bill_5e": "Billet de 5 euros",
+  "item.minenorth_eurobank.bill_10e": "Billet de 10 euros",
+  "item.minenorth_eurobank.bill_20e": "Billet de 20 euros",
+  "item.minenorth_eurobank.bill_50e": "Billet de 50 euros",
+  "item.minenorth_eurobank.bill_100e": "Billet de 100 euros",
+  "item.minenorth_eurobank.bill_200e": "Billet de 200 euros",
+  "item.minenorth_eurobank.bill_500e": "Billet de 500 euros",
+  "block.minenorth_eurobank.atm_base": "Socle de distributeur MineNorth"
+}

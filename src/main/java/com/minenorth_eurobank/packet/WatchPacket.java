@@ -11,7 +11,7 @@ import java.util.function.Supplier;
 
 /** Client -> serveur : "j'ai cet écran ouvert / je l'ai fermé". Sert à pousser les mises à jour en direct. */
 public class WatchPacket {
-    public enum Kind { ATM, BANKER, ADMIN }
+    public enum Kind { ATM, BANKER }
 
     private final Kind kind;
     private final boolean on;
@@ -38,14 +38,12 @@ public class WatchPacket {
             Set<java.util.UUID> set = switch (m.kind) {
                 case ATM -> Network.WATCH_ATM;
                 case BANKER -> Network.WATCH_BANKER;
-                case ADMIN -> Network.WATCH_ADMIN;
             };
             if (!m.on) {
                 set.remove(p.getUUID());
                 return;
             }
             if (m.kind == Kind.BANKER && !LoanService.isBanker(p)) return;
-            if (m.kind == Kind.ADMIN && !p.hasPermissions(2)) return;
             set.add(p.getUUID());
         });
         ctx.setPacketHandled(true);

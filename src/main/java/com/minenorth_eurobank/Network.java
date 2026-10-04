@@ -18,7 +18,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class Network {
-    private static final String PROTOCOL = "5";
+    private static final String PROTOCOL = "6";   // 6 : menu admin retiré (panneau minenorth_admin)
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(EuroBank.MODID, "main"), () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
 
@@ -28,7 +28,6 @@ public final class Network {
     /** Joueurs qui ont actuellement l'écran correspondant ouvert (mises à jour poussées en direct). */
     public static final Set<UUID> WATCH_ATM = ConcurrentHashMap.newKeySet();
     public static final Set<UUID> WATCH_BANKER = ConcurrentHashMap.newKeySet();
-    public static final Set<UUID> WATCH_ADMIN = ConcurrentHashMap.newKeySet();
 
     private Network() {}
 
@@ -36,8 +35,6 @@ public final class Network {
         int id = 0;
         CHANNEL.registerMessage(id++, ActionPacket.class, ActionPacket::encode, ActionPacket::decode, ActionPacket::handle);
         CHANNEL.registerMessage(id++, StatePacket.class, StatePacket::encode, StatePacket::decode, StatePacket::handle);
-        CHANNEL.registerMessage(id++, AdminPacket.class, AdminPacket::encode, AdminPacket::decode, AdminPacket::handle);
-        CHANNEL.registerMessage(id++, AdminListPacket.class, AdminListPacket::encode, AdminListPacket::decode, AdminListPacket::handle);
         CHANNEL.registerMessage(id++, BankerPacket.class, BankerPacket::encode, BankerPacket::decode, BankerPacket::handle);
         CHANNEL.registerMessage(id++, BankerListPacket.class, BankerListPacket::encode, BankerListPacket::decode, BankerListPacket::handle);
         CHANNEL.registerMessage(id++, WatchPacket.class, WatchPacket::encode, WatchPacket::decode, WatchPacket::handle);
@@ -52,10 +49,6 @@ public final class Network {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> p), StatePacket.compute(p, open, message));
     }
 
-    public static void sendAdminList(ServerPlayer p, boolean open, String message) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> p), AdminListPacket.compute(p, open, message));
-    }
-
     public static void sendBankerList(ServerPlayer p, boolean open, String message) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> p), BankerListPacket.compute(p, open, message));
     }
@@ -63,18 +56,16 @@ public final class Network {
     public static void unwatchAll(UUID id) {
         WATCH_ATM.remove(id);
         WATCH_BANKER.remove(id);
-        WATCH_ADMIN.remove(id);
     }
 
     /** Renvoie l'état à tous ceux qui ont un écran ouvert. atmOnly : seulement les ATM (rafraîchit les espèces). */
     public static void refreshWatchers(MinecraftServer s, boolean atmOnly) {
-        if (WATCH_ATM.isEmpty() && WATCH_BANKER.isEmpty() && WATCH_ADMIN.isEmpty()) return;
+        if (WATCH_ATM.isEmpty() && WATCH_BANKER.isEmpty()) return;
         for (ServerPlayer p : s.getPlayerList().getPlayers()) {
             UUID id = p.getUUID();
             if (WATCH_ATM.contains(id)) sendState(p, false, "");
             if (atmOnly) continue;
             if (WATCH_BANKER.contains(id) && LoanService.isBanker(p)) sendBankerList(p, false, "");
-            if (WATCH_ADMIN.contains(id) && p.hasPermissions(2)) sendAdminList(p, false, "");
         }
     }
 

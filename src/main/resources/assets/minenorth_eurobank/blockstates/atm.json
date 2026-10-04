@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "minenorth_eurobank:block/atm"
+    },
+    "facing=east": {
+      "model": "minenorth_eurobank:block/atm",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "minenorth_eurobank:block/atm",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "minenorth_eurobank:block/atm",
+      "y": 270
+    }
+  }
+}

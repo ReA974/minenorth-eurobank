@@ -2,7 +2,6 @@ package com.minenorth_eurobank.client;
 
 import com.minenorth_eurobank.packet.BankerListPacket;
 import com.minenorth_eurobank.packet.StatePacket;
-import com.minenorth_eurobank.packet.AdminListPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
@@ -15,12 +14,6 @@ public final class ClientHooks {
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen instanceof AtmScreen s) s.update(m);
         else if (m.open) mc.setScreen(new AtmScreen(m));
-    }
-
-    public static void handleAdmin(AdminListPacket m) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.screen instanceof AdminScreen s) s.update(m);
-        else if (m.open) mc.setScreen(new AdminScreen(m, mc.screen instanceof AtmScreen a ? a : null));
     }
 
     public static void handleBanker(BankerListPacket m) {

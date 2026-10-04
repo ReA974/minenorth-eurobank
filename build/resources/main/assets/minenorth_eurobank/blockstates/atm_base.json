@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "minenorth_eurobank:block/atm_base"
+    }
+  }
+}

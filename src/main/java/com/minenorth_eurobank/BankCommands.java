@@ -27,8 +27,6 @@ public final class BankCommands {
                         .then(Commands.argument("player", EntityArgument.player())
                                 .then(Commands.argument("amount", DoubleArgumentType.doubleArg(0.01))
                                         .executes(BankCommands::pay))))
-                .then(Commands.literal("admin").requires(s -> s.hasPermission(2))
-                        .executes(BankCommands::openAdmin))
                 .then(Commands.literal("banquier").executes(BankCommands::openBanker))
                 .then(Commands.literal("banker").requires(s -> s.hasPermission(2))
                         .then(Commands.literal("add")
@@ -94,11 +92,6 @@ public final class BankCommands {
         d.add(to.getUUID(), amount);
         to.sendSystemMessage(Component.literal(from.getGameProfile().getName() + " vous a envoyé " + Money.format(amount) + "."));
         return ok(c, "Virement de " + Money.format(amount) + " envoyé à " + to.getGameProfile().getName() + ".");
-    }
-
-    private static int openAdmin(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
-        Network.sendAdminList(c.getSource().getPlayerOrException(), true, "");
-        return 1;
     }
 
     private static int openBanker(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {

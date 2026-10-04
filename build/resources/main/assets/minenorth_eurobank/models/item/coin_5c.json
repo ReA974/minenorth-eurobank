@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "minenorth_eurobank:item/coin_5c"
+  }
+}

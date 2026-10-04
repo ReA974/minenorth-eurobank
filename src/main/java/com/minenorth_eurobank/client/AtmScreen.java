@@ -5,7 +5,6 @@ import com.minenorth_eurobank.EuroBank;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.resources.ResourceLocation;
 import com.minenorth_eurobank.packet.ActionPacket.Action;
-import com.minenorth_eurobank.packet.AdminPacket;
 import com.minenorth_eurobank.packet.BankerPacket;
 import com.minenorth_eurobank.loan.Loan;
 import com.minenorth_eurobank.loan.LoanService;
@@ -151,10 +150,6 @@ public class AtmScreen extends Screen {
                 if (st.banker) {
                     addRenderableWidget(btn(196, 88, 88, 24, "Banquier", CYAN, () ->
                             Network.CHANNEL.sendToServer(new BankerPacket(BankerPacket.Op.LIST, new UUID(0, 0), 0))));
-                }
-                if (st.admin) {
-                    addRenderableWidget(btn(104, 114, 180, 24, "Administration", CYAN, () ->
-                            Network.CHANNEL.sendToServer(new AdminPacket(AdminPacket.Op.LIST, new UUID(0, 0), 0))));
                 }
                 addRenderableWidget(new AtmButton(left + 104, top + 168, 180, 22, Component.empty(), AtmButton.PINK,
                         () -> send(Action.WITHDRAW, QUICK))
