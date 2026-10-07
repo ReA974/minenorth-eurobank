@@ -54,9 +54,9 @@ public class StatePacket {
     public static StatePacket compute(ServerPlayer p, boolean open, String message) {
         BankData d = BankData.get(p.server);
         UUID id = p.getUUID();
-        String name = p.getGameProfile().getName();
         boolean acc = d.has(id);
-        if (acc) d.rename(id, name);
+        if (acc) d.rename(id, p.getGameProfile().getName());
+        String name = d.name(id);
         boolean own = BankCardItem.hasOwnCard(p);
         boolean foreign = !own && BankCardItem.hasAnyCard(p);
         Loan l = acc ? d.openLoanOf(id) : null;

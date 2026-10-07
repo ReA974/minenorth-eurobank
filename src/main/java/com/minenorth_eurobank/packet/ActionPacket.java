@@ -113,7 +113,7 @@ public class ActionPacket {
                 d.add(to, amount);
                 ServerPlayer tp = p.server.getPlayerList().getPlayer(to);
                 if (tp != null) {
-                    tp.sendSystemMessage(Component.literal(p.getGameProfile().getName()
+                    tp.sendSystemMessage(Component.literal(d.name(id)
                             + " vous a envoyé " + Money.format(amount) + "."));
                 }
                 return "Virement de " + Money.format(amount) + " envoyé à " + d.name(to) + ".";

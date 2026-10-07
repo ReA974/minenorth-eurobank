@@ -250,6 +250,35 @@ public class AtmScreen extends Screen {
         g.pose().popPose();
     }
 
+    /** Largeur de la colonne de gauche (avant les boutons). */
+    private static final int NAME_W = 82;
+
+    /**
+     * Nom du titulaire (« Prénom Nom », parfois long) : une ligne si ça tient, sinon le prénom puis le nom sur
+     * deux lignes. Chaque ligne rétrécit un peu si besoin, puis est coupée avec « … » pour ne jamais déborder.
+     */
+    private void drawName(GuiGraphics g, String name, int x, int y) {
+        if (font.width(bold(name)) <= NAME_W) {
+            g.drawString(font, bold(name), x, y, 0xFFFFFFFF, false);
+            return;
+        }
+        int cut = name.indexOf(' ');
+        if (cut <= 0) {
+            drawFit(g, name, x, y);
+            return;
+        }
+        drawFit(g, name.substring(0, cut), x, y);
+        drawFit(g, name.substring(cut + 1), x, y + 10);
+    }
+
+    private void drawFit(GuiGraphics g, String text, int x, int y) {
+        final float minScale = 0.8f;
+        String t = text;
+        while (t.length() > 1 && font.width(bold(t)) * minScale > NAME_W) t = t.substring(0, t.length() - 1);
+        if (!t.equals(text)) t = t.substring(0, Math.max(1, t.length() - 1)) + "…";
+        drawScaled(g, bold(t), x, y, 1.0f, NAME_W, 0xFFFFFFFF);
+    }
+
     private Component bold(String s) {
         return Component.literal(s).withStyle(ChatFormatting.BOLD);
     }
@@ -270,7 +299,7 @@ public class AtmScreen extends Screen {
 
         // colonne de gauche
         g.drawString(font, "Bienvenue", left + 16, top + 48, CYAN, false);
-        g.drawString(font, bold(font.plainSubstrByWidth(st.name, 80)), left + 16, top + 59, 0xFFFFFFFF, false);
+        drawName(g, st.name, left + 16, top + 59);
         if (st.hasAccount) {
             g.drawString(font, "Compte", left + 16, top + 82, CYAN, false);
             drawScaled(g, bold(Money.format(st.balance)), left + 16, top + 93, 1.3f, 80, 0xFFFFFFFF);

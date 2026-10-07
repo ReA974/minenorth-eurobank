@@ -24,7 +24,7 @@ public class BankCardItem extends Item {
         ItemStack s = new ItemStack(ModItems.CARD.get());
         CompoundTag t = s.getOrCreateTag();
         t.putUUID("Owner", p.getUUID());
-        t.putString("OwnerName", p.getGameProfile().getName());
+        t.putString("OwnerName", fr.minenorth.api.MineNorth.displayName(p));
         return s;
     }
 

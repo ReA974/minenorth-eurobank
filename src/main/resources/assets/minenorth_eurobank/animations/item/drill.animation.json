@@ -1,0 +1,104 @@
+{
+  "format_version": "1.8.0",
+  "animations": {
+    "animation.drill.spin": {
+      "loop": true,
+      "bones": {
+        "bit": {
+          "rotation": {
+            "0.0": [
+              0,
+              0,
+              0
+            ],
+            "0.08": [
+              360,
+              0,
+              0
+            ]
+          }
+        },
+        "chuck": {
+          "rotation": {
+            "0.0": [
+              0,
+              0,
+              0
+            ],
+            "0.08": [
+              360,
+              0,
+              0
+            ]
+          }
+        }
+      }
+    },
+    "animation.drill.spin_fast": {
+      "loop": true,
+      "bones": {
+        "bit": {
+          "rotation": {
+            "0.0": [
+              0,
+              0,
+              0
+            ],
+            "0.055": [
+              360,
+              0,
+              0
+            ]
+          }
+        },
+        "chuck": {
+          "rotation": {
+            "0.0": [
+              0,
+              0,
+              0
+            ],
+            "0.055": [
+              360,
+              0,
+              0
+            ]
+          }
+        }
+      }
+    },
+    "animation.drill.spin_ultra": {
+      "loop": true,
+      "bones": {
+        "bit": {
+          "rotation": {
+            "0.0": [
+              0,
+              0,
+              0
+            ],
+            "0.035": [
+              360,
+              0,
+              0
+            ]
+          }
+        },
+        "chuck": {
+          "rotation": {
+            "0.0": [
+              0,
+              0,
+              0
+            ],
+            "0.035": [
+              360,
+              0,
+              0
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -73,7 +73,7 @@ public final class LoanService {
         Loan l = new Loan(UUID.randomUUID(), id, amount, days, System.currentTimeMillis());
         l.rateBp = d.termRate(days);   // taux annoncé au joueur, que le banquier peut ajuster
         d.addLoan(l);
-        tellBankers(p.server, p.getGameProfile().getName() + " demande un prêt de " + Money.format(amount) + " sur " + days
+        tellBankers(p.server, d.name(p.getUUID()) + " demande un prêt de " + Money.format(amount) + " sur " + days
                 + " jours (taux " + rateLabel(l.rateBp) + ").");
         return "Demande envoyée. Un banquier va l'examiner.";
     }

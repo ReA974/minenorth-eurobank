@@ -1,0 +1,9 @@
+{
+  "drill_start": {"sounds": ["minenorth_eurobank:drill_start"]},
+  "drill_loop": {"sounds": ["minenorth_eurobank:drill_loop"], "replace": true},
+  "drill_stop": {"sounds": ["minenorth_eurobank:drill_stop"]},
+  "hack_start": {"sounds": ["minenorth_eurobank:hack_start"]},
+  "hack_beep": {"sounds": ["minenorth_eurobank:hack_beep"]},
+  "hack_success": {"sounds": ["minenorth_eurobank:hack_success"]},
+  "hack_fail": {"sounds": ["minenorth_eurobank:hack_fail"]}
+}

@@ -33,8 +33,13 @@ public class BankData extends SavedData {
     private final int[] termRates = {100, 250, 500, 800, 1200};
     private boolean refreshPending;
 
+    /** Serveur courant (non sauvegardé) : sert à lire l'identité RP pour les noms affichés. */
+    private transient MinecraftServer server;
+
     public static BankData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(BankData::load, BankData::new, NAME);
+        BankData d = server.overworld().getDataStorage().computeIfAbsent(BankData::load, BankData::new, NAME);
+        d.server = server;
+        return d;
     }
 
     public static BankData load(CompoundTag tag) {
@@ -123,14 +128,29 @@ public class BankData extends SavedData {
         }
     }
 
+    /** Nom affiché : « Prénom Nom » de la carte d'identité (règle MineNorth), sinon pseudo enregistré. */
     public String name(UUID id) {
+        if (server != null) {
+            var idt = fr.minenorth.api.MineNorth.identity().get(server, id);
+            if (idt.isPresent()) return idt.get().fullName();
+        }
         String n = names.get(id);
         return n != null ? n : id.toString().substring(0, 8);
     }
 
+    /** Pseudo Minecraft enregistré (clé technique, jamais affiché en RP). */
+    public String pseudo(UUID id) {
+        String n = names.get(id);
+        return n != null ? n : id.toString().substring(0, 8);
+    }
+
+    /** Compte par pseudo OU par nom RP (« Prénom Nom »), sans tenir compte des majuscules. */
     public UUID findByName(String name) {
         for (Map.Entry<UUID, String> e : names.entrySet()) {
             if (e.getValue().equalsIgnoreCase(name) && balances.containsKey(e.getKey())) return e.getKey();
+        }
+        for (UUID id : balances.keySet()) {
+            if (name(id).equalsIgnoreCase(name)) return id;
         }
         return null;
     }

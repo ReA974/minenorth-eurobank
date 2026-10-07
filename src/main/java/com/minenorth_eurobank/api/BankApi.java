@@ -35,27 +35,34 @@ public final class BankApi {
         return PayResult.OK;
     }
 
-    /** Débite le compte (l'argent disparaît de l'économie). */
+    /** Débite le compte ; la somme part au trésor public (MineNorth API). Préférer MineNorth.bank().charge(p, cents, source). */
     public static PayResult charge(ServerPlayer p, long cents) {
+        return charge(p, cents, "carte");
+    }
+
+    public static PayResult charge(ServerPlayer p, long cents, String source) {
         PayResult r = check(p, cents);
-        if (r == PayResult.OK) BankData.get(p.server).add(p.getUUID(), -cents);
+        if (r == PayResult.OK) {
+            BankData.get(p.server).add(p.getUUID(), -cents);
+            fr.minenorth.api.MineNorth.treasury().collect(p.server, cents, source);
+        }
         return r;
     }
 
-    /** Débite le compte et verse la somme au capital de la banque (réutilisable pour les prêts). */
+    /**
+     * Ancien « vers le capital de la banque » (amendes, frais d'hôpital). Règle MineNorth : tout prélèvement va au
+     * trésor public, comme les autres. Le capital des prêts se gère avec /bank reserve.
+     */
     public static PayResult chargeToReserve(ServerPlayer p, long cents) {
-        PayResult r = check(p, cents);
-        if (r == PayResult.OK) {
-            BankData d = BankData.get(p.server);
-            d.add(p.getUUID(), -cents);
-            d.addReserve(cents);
-        }
-        return r;
+        return charge(p, cents, "frais");
     }
 
     /** Recrédite le compte (ex. achat annulé après le débit). */
     public static void refund(ServerPlayer p, long cents) {
         BankData d = BankData.get(p.server);
-        if (cents > 0 && d.has(p.getUUID())) d.add(p.getUUID(), cents);
+        if (cents > 0 && d.has(p.getUUID())) {
+            d.add(p.getUUID(), cents);
+            fr.minenorth.api.MineNorth.treasury().collect(p.server, -cents, "remboursement");
+        }
     }
 }

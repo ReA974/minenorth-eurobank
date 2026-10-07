@@ -67,7 +67,7 @@ public final class BankCommands {
     }
 
     private static int ok(CommandContext<CommandSourceStack> c, String msg) {
-        c.getSource().sendSuccess(() -> Component.literal(msg), false);
+        c.getSource().sendSystemMessage(Component.literal(msg));
         return 1;
     }
 
@@ -85,13 +85,13 @@ public final class BankCommands {
         BankData d = BankData.get(c.getSource().getServer());
         if (from.getUUID().equals(to.getUUID())) return fail(c, "Vous ne pouvez pas vous payer vous-même.");
         if (!d.has(from.getUUID())) return fail(c, "Vous n'avez pas de compte.");
-        if (!d.has(to.getUUID())) return fail(c, to.getGameProfile().getName() + " n'a pas de compte.");
+        if (!d.has(to.getUUID())) return fail(c, d.name(to.getUUID()) + " n'a pas de compte.");
         if (amount <= 0) return fail(c, "Montant invalide.");
         if (d.balance(from.getUUID()) < amount) return fail(c, "Solde insuffisant.");
         d.add(from.getUUID(), -amount);
         d.add(to.getUUID(), amount);
-        to.sendSystemMessage(Component.literal(from.getGameProfile().getName() + " vous a envoyé " + Money.format(amount) + "."));
-        return ok(c, "Virement de " + Money.format(amount) + " envoyé à " + to.getGameProfile().getName() + ".");
+        to.sendSystemMessage(Component.literal(d.name(from.getUUID()) + " vous a envoyé " + Money.format(amount) + "."));
+        return ok(c, "Virement de " + Money.format(amount) + " envoyé à " + d.name(to.getUUID()) + ".");
     }
 
     private static int openBanker(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
