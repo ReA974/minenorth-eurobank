@@ -42,8 +42,11 @@ public class EuroBank {
         com.minenorth_eurobank.braquage.item.ModCreativeTabs.TABS.register(bus);
         com.minenorth_eurobank.braquage.item.ModSounds.SOUNDS.register(bus);
         com.minenorth_eurobank.braquage.network.ModNetwork.register();
-        FMLJavaModLoadingContext.get().registerConfig(net.minecraftforge.fml.config.ModConfig.Type.COMMON,
-                com.minenorth_eurobank.braquage.config.ModConfig.SPEC, "Minenorth-banque/coffre.toml");
+        // Config côté serveur uniquement : le client ne crée aucun fichier (les valeurs par défaut s'appliquent).
+        if (net.minecraftforge.fml.loading.FMLEnvironment.dist == net.minecraftforge.api.distmarker.Dist.DEDICATED_SERVER) {
+            FMLJavaModLoadingContext.get().registerConfig(net.minecraftforge.fml.config.ModConfig.Type.COMMON,
+                    com.minenorth_eurobank.braquage.config.ModConfig.SPEC, "Minenorth-banque/coffre.toml");
+        }
         bus.addListener(this::commonSetup);
         MinecraftForge.EVENT_BUS.register(this);
         fr.minenorth.api.MineNorth.provide(fr.minenorth.api.BankService.class, new com.minenorth_eurobank.api.BankProvider());
