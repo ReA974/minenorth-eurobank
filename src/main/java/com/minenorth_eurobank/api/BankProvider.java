@@ -49,7 +49,7 @@ public final class BankProvider implements fr.minenorth.api.BankService {
         if (cents <= 0 || !d.has(player)) return false;
         d.add(player, cents);
         MineNorth.treasury().collect(s, -cents, source);
-        record(s, player, cents, BankTx.ADMIN, source, null);
+        record(s, player, cents, BankTx.INCOME, source, null);
         return true;
     }
 
@@ -61,18 +61,27 @@ public final class BankProvider implements fr.minenorth.api.BankService {
         if (!allowNegative && d.balance(player) < cents) return fr.minenorth.api.PayResult.INSUFFICIENT_FUNDS;
         d.add(player, -cents);
         MineNorth.treasury().collect(s, cents, source);
-        record(s, player, -cents, BankTx.ADMIN, source, null);
+        record(s, player, -cents, BankTx.PAYMENT, source, null);
         return fr.minenorth.api.PayResult.OK;
     }
 
     @Override
     public fr.minenorth.api.PayResult transfer(MinecraftServer s, UUID from, UUID to, long cents) {
+        return doTransfer(s, from, to, cents, BankTx.PAYMENT, BankTx.INCOME, null, null);
+    }
+
+    /** Déplacement des fonds puis historique sur les comptes entreprise (un seul enregistrement par côté). */
+    private static fr.minenorth.api.PayResult doTransfer(MinecraftServer s, UUID from, UUID to, long cents,
+                                                         String catOut, String catIn, String label, String actor) {
         if (cents <= 0 || from.equals(to)) return fr.minenorth.api.PayResult.INVALID_AMOUNT;
         BankData d = BankData.get(s);
         if (!d.has(from) || !d.has(to)) return fr.minenorth.api.PayResult.NO_ACCOUNT;
         if (d.balance(from) < cents) return fr.minenorth.api.PayResult.INSUFFICIENT_FUNDS;
         d.add(from, -cents);
         d.add(to, cents);
+        boolean noLabel = label == null || label.isEmpty();
+        if (d.isBusiness(from)) record(s, from, -cents, catOut, noLabel ? d.name(to) : label, actor);
+        if (d.isBusiness(to)) record(s, to, cents, catIn, noLabel ? d.name(from) : label, actor);
         return fr.minenorth.api.PayResult.OK;
     }
 
@@ -110,13 +119,7 @@ public final class BankProvider implements fr.minenorth.api.BankService {
     @Override
     public fr.minenorth.api.PayResult transfer(MinecraftServer s, UUID from, UUID to, long cents, String category, String label, String actor) {
         if (cents > MAX_CENTS) return fr.minenorth.api.PayResult.INVALID_AMOUNT;
-        fr.minenorth.api.PayResult r = transfer(s, from, to, cents);
-        if (r != fr.minenorth.api.PayResult.OK) return r;
-        BankData d = BankData.get(s);
-        boolean noLabel = label == null || label.isEmpty();
-        if (d.isBusiness(from)) record(s, from, -cents, category, noLabel ? d.name(to) : label, actor);
-        if (d.isBusiness(to)) record(s, to, cents, category, noLabel ? d.name(from) : label, actor);
-        return r;
+        return doTransfer(s, from, to, cents, category, category, label, actor);
     }
 
     @Override
