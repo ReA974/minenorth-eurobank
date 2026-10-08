@@ -39,4 +39,51 @@ class BankDataBusinessTest {
         assertTrue(r.signers(b).isEmpty());
         assertTrue(r.history(b, 10).isEmpty());
     }
+
+    @Test
+    void listedBusinessesIsSortedAndOnlyListed() {
+        BankData d = new BankData();
+        UUID a = UUID.randomUUID(), b = UUID.randomUUID(), c = UUID.randomUUID(), p = UUID.randomUUID();
+        d.openBusiness(a, "zeta");
+        d.openBusiness(b, "Alpha");
+        d.openBusiness(c, "Hidden");
+        d.open(p);
+        d.setListed(a, true);
+        d.setListed(b, true);
+        d.setListed(p, true);   // compte joueur : sans effet
+        assertTrue(d.isListed(a));
+        assertFalse(d.isListed(c));
+        assertFalse(d.isListed(p));
+        var l = d.listedBusinesses();
+        assertEquals(2, l.size());
+        assertEquals(b, l.get(0).getKey());
+        assertEquals("Alpha", l.get(0).getValue());
+        assertEquals(a, l.get(1).getKey());
+        assertEquals("zeta", l.get(1).getValue());
+    }
+
+    @Test
+    void listingSurvivesSaveLoad() {
+        BankData d = new BankData();
+        UUID a = UUID.randomUUID(), b = UUID.randomUUID();
+        d.openBusiness(a, "Acme");
+        d.openBusiness(b, "Bolt");
+        d.setListed(a, true);
+        BankData r = BankData.load(d.save(new CompoundTag()));
+        assertTrue(r.isListed(a));
+        assertFalse(r.isListed(b));
+        assertEquals(1, r.listedBusinesses().size());
+        assertTrue(BankData.load(new CompoundTag()).listedBusinesses().isEmpty());
+    }
+
+    @Test
+    void closeUnlists() {
+        BankData d = new BankData();
+        UUID a = UUID.randomUUID();
+        d.openBusiness(a, "Acme");
+        d.setListed(a, true);
+        d.closeBusiness(a);
+        assertFalse(d.isListed(a));
+        assertTrue(d.listedBusinesses().isEmpty());
+    }
 }

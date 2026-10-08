@@ -32,6 +32,8 @@ public class BankData extends SavedData {
     private final Set<UUID> bankers = new HashSet<>();
     /** Comptes entreprise : leur solde est dans balances, leur libellé dans names. */
     private final Set<UUID> business = new HashSet<>();
+    /** Comptes entreprise visibles dans l'ATM. */
+    private final Set<UUID> listed = new HashSet<>();
     private final Map<UUID, Set<UUID>> signers = new HashMap<>();
     private final Map<UUID, TxLog> history = new HashMap<>();
     private final Map<UUID, Loan> loans = new LinkedHashMap<>();
@@ -60,6 +62,8 @@ public class BankData extends SavedData {
         }
         ListTag bz = tag.getList("business", Tag.TAG_INT_ARRAY);
         for (int i = 0; i < bz.size(); i++) d.business.add(NbtUtils.loadUUID(bz.get(i)));
+        ListTag ls = tag.getList("listed", Tag.TAG_INT_ARRAY);
+        for (int i = 0; i < ls.size(); i++) d.listed.add(NbtUtils.loadUUID(ls.get(i)));
         ListTag sg = tag.getList("signers", Tag.TAG_COMPOUND);
         for (int i = 0; i < sg.size(); i++) {
             CompoundTag t = sg.getCompound(i);
@@ -110,6 +114,9 @@ public class BankData extends SavedData {
         ListTag bz = new ListTag();
         for (UUID b : business) bz.add(NbtUtils.createUUID(b));
         tag.put("business", bz);
+        ListTag ls = new ListTag();
+        for (UUID b : listed) ls.add(NbtUtils.createUUID(b));
+        tag.put("listed", ls);
         ListTag sg = new ListTag();
         signers.forEach((id, set) -> {
             CompoundTag t = new CompoundTag();
@@ -235,8 +242,29 @@ public class BankData extends SavedData {
         setDirty();
     }
 
+    public boolean isListed(UUID id) { return listed.contains(id); }
+
+    /** Marque un compte entreprise comme visible dans l'ATM ; sans effet pour un autre compte. */
+    public void setListed(UUID id, boolean on) {
+        if (!business.contains(id)) return;
+        if (on ? listed.add(id) : listed.remove(id)) setDirty();
+    }
+
+    /** Comptes entreprise listés, triés par libellé sans tenir compte de la casse. */
+    public List<Map.Entry<UUID, String>> listedBusinesses() {
+        List<Map.Entry<UUID, String>> out = new ArrayList<>();
+        for (UUID id : listed) {
+            if (!business.contains(id)) continue;
+            String n = names.get(id);
+            out.add(Map.entry(id, n != null ? n : id.toString().substring(0, 8)));
+        }
+        out.sort((x, y) -> x.getValue().compareToIgnoreCase(y.getValue()));
+        return out;
+    }
+
     public void closeBusiness(UUID id) {
         business.remove(id);
+        listed.remove(id);
         balances.remove(id);
         names.remove(id);
         signers.remove(id);

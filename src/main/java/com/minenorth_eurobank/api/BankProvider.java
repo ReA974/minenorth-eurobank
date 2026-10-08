@@ -111,6 +111,11 @@ public final class BankProvider implements fr.minenorth.api.BankService {
     }
 
     @Override
+    public void setAccountListed(MinecraftServer s, UUID accountId, boolean listed) {
+        BankData.get(s).setListed(accountId, listed);
+    }
+
+    @Override
     public void setSigners(MinecraftServer s, UUID accountId, Set<UUID> signers) {
         BankData d = BankData.get(s);
         if (d.isBusiness(accountId)) d.setSigners(accountId, signers);
