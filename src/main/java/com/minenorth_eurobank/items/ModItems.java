@@ -24,6 +24,7 @@ public final class ModItems {
     }
 
     public static final RegistryObject<Item> CARD = ITEMS.register("bank_card", BankCardItem::new);
+    public static final RegistryObject<Item> BUSINESS_CARD = ITEMS.register("business_card", BusinessCardItem::new);
     public static final RegistryObject<Item> ATM_ITEM = ITEMS.register("atm",
             () -> new BlockItem(ModBlocks.ATM.get(), new Item.Properties()));
     public static final RegistryObject<Item> ATM_BASE_ITEM = ITEMS.register("atm_base",

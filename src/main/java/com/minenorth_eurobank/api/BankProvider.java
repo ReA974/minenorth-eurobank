@@ -133,6 +133,14 @@ public final class BankProvider implements fr.minenorth.api.BankService {
     }
 
     @Override
+    public boolean giveBusinessCard(ServerPlayer p, UUID accountId, String companyName) {
+        if (!BankData.get(p.server).isBusiness(accountId)) return false;
+        net.minecraft.world.item.ItemStack stack = com.minenorth_eurobank.items.BusinessCardItem.create(p, accountId, companyName);
+        if (!p.getInventory().add(stack)) p.drop(stack, false);
+        return true;
+    }
+
+    @Override
     public List<BankTx> history(MinecraftServer s, UUID accountId, int limit) {
         return BankData.get(s).history(accountId, limit);
     }
