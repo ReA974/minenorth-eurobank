@@ -3,9 +3,11 @@ package com.minenorth_eurobank.packet;
 import com.minenorth_eurobank.BankData;
 import com.minenorth_eurobank.Money;
 import com.minenorth_eurobank.Network;
+import com.minenorth_eurobank.api.BankProvider;
 import com.minenorth_eurobank.items.BankCardItem;
 import com.minenorth_eurobank.loan.Loan;
 import com.minenorth_eurobank.loan.LoanService;
+import fr.minenorth.api.BankTx;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -17,7 +19,12 @@ import java.util.function.Supplier;
 /** Client -> serveur : action demandée à l'ATM. Tout est revalidé côté serveur. */
 public class ActionPacket {
     public enum Action { OPEN_ACCOUNT, NEW_CARD, DEPOSIT_ALL, DEPOSIT, WITHDRAW, TRANSFER,
-        LOAN_REQUEST, LOAN_CANCEL, LOAN_REPAY, LOAN_REPAY_ALL }
+        LOAN_REQUEST, LOAN_CANCEL, LOAN_REPAY, LOAN_REPAY_ALL, TRANSFER_COMPANY }
+
+    /** Plafond d'un virement vers une entreprise (10 M€ en centimes, comme l'API). */
+    public static final long MAX_TRANSFER = 1_000_000_000L;
+    /** Longueur max de {@code target} (pseudo, durée, ou UUID texte d'un compte entreprise). */
+    private static final int TARGET_MAX = 64;
 
     public static final long MAX_WITHDRAW = 10_000_00L;
 
@@ -38,11 +45,11 @@ public class ActionPacket {
     public static void encode(ActionPacket m, FriendlyByteBuf b) {
         b.writeEnum(m.action);
         b.writeLong(m.amount);
-        b.writeUtf(m.target, 32);
+        b.writeUtf(m.target, TARGET_MAX);
     }
 
     public static ActionPacket decode(FriendlyByteBuf b) {
-        return new ActionPacket(b.readEnum(Action.class), b.readLong(), b.readUtf(32));
+        return new ActionPacket(b.readEnum(Action.class), b.readLong(), b.readUtf(TARGET_MAX));
     }
 
     public static void handle(ActionPacket m, Supplier<NetworkEvent.Context> sup) {
@@ -50,6 +57,10 @@ public class ActionPacket {
         ctx.enqueueWork(() -> {
             ServerPlayer p = ctx.getSender();
             if (p == null || !Network.nearAtm(p)) return;
+            if (com.minenorth_eurobank.items.BusinessCardItem.holdsCard(p)) {
+                Network.sendState(p, false, com.minenorth_eurobank.items.BusinessCardItem.ATM_REFUSAL);
+                return;
+            }
             Network.sendState(p, false, process(p, m.action, m.amount, m.target));
         });
         ctx.setPacketHandled(true);
@@ -116,6 +127,23 @@ public class ActionPacket {
                     tp.sendSystemMessage(Component.literal(d.name(id)
                             + " vous a envoyé " + Money.format(amount) + "."));
                 }
+                return "Virement de " + Money.format(amount) + " envoyé à " + d.name(to) + ".";
+            }
+            case TRANSFER_COMPANY: {
+                if (amount <= 0 || amount > MAX_TRANSFER) return "Montant invalide.";
+                UUID to;
+                try {
+                    to = UUID.fromString(target.trim());
+                } catch (IllegalArgumentException e) {
+                    return "Entreprise introuvable.";
+                }
+                // seul un compte entreprise listé est accepté : jamais un compte joueur, jamais une entreprise dissoute
+                if (!d.isBusiness(to) || !d.isListed(to)) return "Aucune entreprise à ce nom.";
+                if (d.balance(id) < amount) return "Solde insuffisant.";
+                String me = d.name(id);
+                fr.minenorth.api.PayResult r = new BankProvider().transfer(p.server, id, to, amount,
+                        BankTx.INCOME, "Virement de " + me, me);
+                if (!r.ok()) return r.message();
                 return "Virement de " + Money.format(amount) + " envoyé à " + d.name(to) + ".";
             }
             case LOAN_REQUEST: {

@@ -36,7 +36,11 @@ public class AtmBlock extends HorizontalDirectionalBlock {
     @Override
     public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
         if (!level.isClientSide && player instanceof ServerPlayer sp) {
-            Network.openAtm(sp, pos);
+            if (com.minenorth_eurobank.items.BusinessCardItem.holdsCard(sp)) {
+                sp.displayClientMessage(net.minecraft.network.chat.Component.literal(com.minenorth_eurobank.items.BusinessCardItem.ATM_REFUSAL), true);
+            } else {
+                Network.openAtm(sp, pos);
+            }
         }
         return InteractionResult.sidedSuccess(level.isClientSide);
     }
