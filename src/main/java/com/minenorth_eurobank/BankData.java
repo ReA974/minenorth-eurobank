@@ -2,6 +2,7 @@ package com.minenorth_eurobank;
 
 import com.minenorth_eurobank.loan.Loan;
 import com.minenorth_eurobank.loan.LoanService;
+import fr.minenorth.api.BankTx;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtUtils;
@@ -9,12 +10,14 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -27,6 +30,10 @@ public class BankData extends SavedData {
     private final Map<UUID, Long> balances = new HashMap<>();
     private final Map<UUID, String> names = new HashMap<>();
     private final Set<UUID> bankers = new HashSet<>();
+    /** Comptes entreprise : leur solde est dans balances, leur libellé dans names. */
+    private final Set<UUID> business = new HashSet<>();
+    private final Map<UUID, Set<UUID>> signers = new HashMap<>();
+    private final Map<UUID, TxLog> history = new HashMap<>();
     private final Map<UUID, Loan> loans = new LinkedHashMap<>();
     private long reserve;
     /** Taux (points de base) appliqué sur la durée du prêt, par durée, dans l'ordre de LoanService.TERMS : 1, 3, 7, 14, 30 jours. */
@@ -50,6 +57,28 @@ public class BankData extends SavedData {
             UUID id = t.getUUID("id");
             d.balances.put(id, t.getLong("cents"));
             if (t.contains("name")) d.names.put(id, t.getString("name"));
+        }
+        ListTag bz = tag.getList("business", Tag.TAG_INT_ARRAY);
+        for (int i = 0; i < bz.size(); i++) d.business.add(NbtUtils.loadUUID(bz.get(i)));
+        ListTag sg = tag.getList("signers", Tag.TAG_COMPOUND);
+        for (int i = 0; i < sg.size(); i++) {
+            CompoundTag t = sg.getCompound(i);
+            Set<UUID> set = new HashSet<>();
+            ListTag ids = t.getList("ids", Tag.TAG_INT_ARRAY);
+            for (int j = 0; j < ids.size(); j++) set.add(NbtUtils.loadUUID(ids.get(j)));
+            d.signers.put(t.getUUID("id"), set);
+        }
+        ListTag hs = tag.getList("history", Tag.TAG_COMPOUND);
+        for (int i = 0; i < hs.size(); i++) {
+            CompoundTag t = hs.getCompound(i);
+            TxLog log = new TxLog();
+            ListTag txs = t.getList("txs", Tag.TAG_COMPOUND);
+            for (int j = 0; j < txs.size(); j++) {
+                CompoundTag x = txs.getCompound(j);
+                log.add(new BankTx(x.getLong("time"), x.getString("cat"), x.getLong("cents"),
+                        x.getLong("after"), x.getString("label"), x.getString("actor")));
+            }
+            d.history.put(t.getUUID("id"), log);
         }
         d.reserve = tag.getLong("reserve");
         if (tag.contains("rates")) {
@@ -78,6 +107,38 @@ public class BankData extends SavedData {
             list.add(t);
         });
         tag.put("accounts", list);
+        ListTag bz = new ListTag();
+        for (UUID b : business) bz.add(NbtUtils.createUUID(b));
+        tag.put("business", bz);
+        ListTag sg = new ListTag();
+        signers.forEach((id, set) -> {
+            CompoundTag t = new CompoundTag();
+            t.putUUID("id", id);
+            ListTag ids = new ListTag();
+            for (UUID u : set) ids.add(NbtUtils.createUUID(u));
+            t.put("ids", ids);
+            sg.add(t);
+        });
+        tag.put("signers", sg);
+        ListTag hs = new ListTag();
+        history.forEach((id, log) -> {
+            CompoundTag t = new CompoundTag();
+            t.putUUID("id", id);
+            ListTag txs = new ListTag();
+            for (BankTx x : log.all()) {
+                CompoundTag c = new CompoundTag();
+                c.putLong("time", x.time());
+                c.putString("cat", x.category());
+                c.putLong("cents", x.cents());
+                c.putLong("after", x.balanceAfter());
+                c.putString("label", x.label() == null ? "" : x.label());
+                c.putString("actor", x.actor() == null ? "" : x.actor());
+                txs.add(c);
+            }
+            t.put("txs", txs);
+            hs.add(t);
+        });
+        tag.put("history", hs);
         tag.putLong("reserve", reserve);
         tag.putIntArray("rates", termRates);
         ListTag bl = new ListTag();
@@ -147,17 +208,60 @@ public class BankData extends SavedData {
     /** Compte par pseudo OU par nom RP (« Prénom Nom »), sans tenir compte des majuscules. */
     public UUID findByName(String name) {
         for (Map.Entry<UUID, String> e : names.entrySet()) {
-            if (e.getValue().equalsIgnoreCase(name) && balances.containsKey(e.getKey())) return e.getKey();
+            if (e.getValue().equalsIgnoreCase(name) && balances.containsKey(e.getKey()) && !business.contains(e.getKey())) return e.getKey();
         }
         for (UUID id : balances.keySet()) {
-            if (name(id).equalsIgnoreCase(name)) return id;
+            if (!business.contains(id) && name(id).equalsIgnoreCase(name)) return id;
         }
         return null;
     }
 
-    public Map<UUID, Long> all() { return Collections.unmodifiableMap(balances); }
+    /** Comptes joueurs uniquement (les comptes entreprise sont exclus). */
+    public Map<UUID, Long> all() {
+        Map<UUID, Long> m = new HashMap<>(balances);
+        m.keySet().removeAll(business);
+        return Collections.unmodifiableMap(m);
+    }
 
     public long total() { return balances.values().stream().mapToLong(Long::longValue).sum(); }
+
+    // --- comptes entreprise
+    public boolean isBusiness(UUID id) { return business.contains(id); }
+
+    public void openBusiness(UUID id, String label) {
+        business.add(id);
+        balances.putIfAbsent(id, 0L);
+        names.put(id, label);
+        setDirty();
+    }
+
+    public void closeBusiness(UUID id) {
+        business.remove(id);
+        balances.remove(id);
+        names.remove(id);
+        signers.remove(id);
+        history.remove(id);
+        setDirty();
+    }
+
+    public Set<UUID> signers(UUID account) {
+        return Collections.unmodifiableSet(signers.getOrDefault(account, Set.of()));
+    }
+
+    public void setSigners(UUID account, Set<UUID> s) {
+        signers.put(account, new HashSet<>(s));
+        setDirty();
+    }
+
+    public void record(UUID account, BankTx tx) {
+        history.computeIfAbsent(account, k -> new TxLog()).add(tx);
+        setDirty();
+    }
+
+    public List<BankTx> history(UUID account, int limit) {
+        TxLog log = history.get(account);
+        return log == null ? new ArrayList<>() : log.latest(limit);
+    }
 
     // --- capital de la banque (argent disponible pour les prêts)
     public long reserve() { return reserve; }
