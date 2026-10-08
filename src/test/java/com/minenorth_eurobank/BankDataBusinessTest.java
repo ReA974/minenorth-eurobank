@@ -44,22 +44,28 @@ class BankDataBusinessTest {
     void listedBusinessesIsSortedAndOnlyListed() {
         BankData d = new BankData();
         UUID a = UUID.randomUUID(), b = UUID.randomUUID(), c = UUID.randomUUID(), p = UUID.randomUUID();
-        d.openBusiness(a, "zeta");
-        d.openBusiness(b, "Alpha");
+        UUID m = UUID.randomUUID();
+        // Tri insensible à la casse : alpha < Mango < Zeta ; tri sensible : Mango < Zeta < alpha (donc le test échoue avec compareTo).
+        d.openBusiness(a, "Zeta");
+        d.openBusiness(b, "alpha");
+        d.openBusiness(m, "Mango");
         d.openBusiness(c, "Hidden");
         d.open(p);
         d.setListed(a, true);
         d.setListed(b, true);
+        d.setListed(m, true);
         d.setListed(p, true);   // compte joueur : sans effet
         assertTrue(d.isListed(a));
         assertFalse(d.isListed(c));
         assertFalse(d.isListed(p));
         var l = d.listedBusinesses();
-        assertEquals(2, l.size());
+        assertEquals(3, l.size());
         assertEquals(b, l.get(0).getKey());
-        assertEquals("Alpha", l.get(0).getValue());
-        assertEquals(a, l.get(1).getKey());
-        assertEquals("zeta", l.get(1).getValue());
+        assertEquals("alpha", l.get(0).getValue());
+        assertEquals(m, l.get(1).getKey());
+        assertEquals("Mango", l.get(1).getValue());
+        assertEquals(a, l.get(2).getKey());
+        assertEquals("Zeta", l.get(2).getValue());
     }
 
     @Test
