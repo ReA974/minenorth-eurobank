@@ -18,7 +18,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class Network {
-    private static final String PROTOCOL = "6";   // 6 : menu admin retiré (panneau minenorth_admin)
+    private static final String PROTOCOL = "7";   // 7 : virement ATM vers une entreprise (liste dans StatePacket, cible 64)
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(EuroBank.MODID, "main"), () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
 

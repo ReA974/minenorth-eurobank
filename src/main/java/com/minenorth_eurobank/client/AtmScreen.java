@@ -27,7 +27,10 @@ import java.util.UUID;
 /** Écran de distributeur : fond bleu, gros boutons cyan, barre rose de retrait rapide. */
 @OnlyIn(Dist.CLIENT)
 public class AtmScreen extends Screen {
-    private enum Page { HOME, WITHDRAW, DEPOSIT, TRANSFER, LOAN }
+    private enum Page { HOME, WITHDRAW, DEPOSIT, TRANSFER_CHOICE, TRANSFER, TRANSFER_COMPANY, LOAN }
+
+    /** Entreprises par page de la liste de virement. */
+    private static final int PER_PAGE = 5;
 
     private static final int W = 300, H = 196;
     private static final ResourceLocation LOGO = new ResourceLocation(EuroBank.MODID, "textures/gui/logo.png");
@@ -44,6 +47,9 @@ public class AtmScreen extends Screen {
     private Page page = Page.HOME;
     private String amountText = "", targetText = "";
     private int loanTerm = 7;
+    /** Page courante de la liste d'entreprises (bornée à chaque reconstruction) et entreprise choisie. */
+    private int companyPage;
+    private UUID selectedCompany;
     private EditBox amountBox, targetBox;
     private int left, top;
     private boolean watching;
@@ -61,6 +67,7 @@ public class AtmScreen extends Screen {
                 .append(s.loanStatus).append(s.cash).append(s.loanPrincipal).append(s.loanTotal).append(s.loanRepaid)
                 .append(s.balance >= QUICK);
         for (long v : PRESETS) b.append(s.balance >= v);
+        for (StatePacket.CompanyEntry c : s.companies) b.append('|').append(c.id()).append(c.name());
         return b.toString();
     }
 
@@ -114,7 +121,33 @@ public class AtmScreen extends Screen {
     }
 
     private void back() {
-        addRenderableWidget(btn(104, 168, 180, 22, "Retour", AtmButton.DARK, () -> setPage(Page.HOME)));
+        back(Page.HOME);
+    }
+
+    private void back(Page to) {
+        addRenderableWidget(btn(104, 168, 180, 22, "Retour", AtmButton.DARK, () -> setPage(to)));
+    }
+
+    private int companyPages() {
+        return Math.max(1, (st.companies.size() + PER_PAGE - 1) / PER_PAGE);
+    }
+
+    /** Libellé coupé à la largeur disponible, terminé par « … » s'il a été raccourci. */
+    private String fit(String s, int maxWidth) {
+        if (font.width(s) <= maxWidth) return s;
+        return font.plainSubstrByWidth(s, Math.max(0, maxWidth - font.width("…"))) + "…";
+    }
+
+    private void selectCompany(UUID id) {
+        saveTexts();
+        selectedCompany = id;
+        rebuildWidgets();
+    }
+
+    private void turnCompanyPage(int delta) {
+        saveTexts();
+        companyPage += delta;
+        rebuildWidgets();
     }
 
     @Override
@@ -143,7 +176,7 @@ public class AtmScreen extends Screen {
             case HOME -> {
                 addRenderableWidget(btn(104, 36, 88, 24, "Retirer", CYAN, () -> setPage(Page.WITHDRAW)));
                 addRenderableWidget(btn(196, 36, 88, 24, "Déposer", CYAN, () -> setPage(Page.DEPOSIT)));
-                addRenderableWidget(btn(104, 62, 88, 24, "Virement", CYAN, () -> setPage(Page.TRANSFER)));
+                addRenderableWidget(btn(104, 62, 88, 24, "Virement", CYAN, () -> setPage(Page.TRANSFER_CHOICE)));
                 addRenderableWidget(btn(196, 62, 88, 24, "Tout déposer", CYAN,
                         () -> send(Action.DEPOSIT_ALL, 0)).enabled(st.cash > 0));
                 addRenderableWidget(btn(104, 88, 88, 24, "Prêt", CYAN, () -> setPage(Page.LOAN)));
@@ -191,7 +224,42 @@ public class AtmScreen extends Screen {
                 setInitialFocus(targetText.isEmpty() ? targetBox : amountBox);
                 addRenderableWidget(btn(226, 93, 58, 20, "Envoyer", CYAN,
                         () -> send(Action.TRANSFER, amountInput(), targetBox.getValue())));
+                back(Page.TRANSFER_CHOICE);
+            }
+            case TRANSFER_CHOICE -> {
+                addRenderableWidget(btn(104, 56, 180, 28, "Virement à un joueur", CYAN, () -> setPage(Page.TRANSFER)));
+                addRenderableWidget(btn(104, 90, 180, 28, "Virement à une entreprise", CYAN,
+                        () -> setPage(Page.TRANSFER_COMPANY)));
                 back();
+            }
+            case TRANSFER_COMPANY -> {
+                List<StatePacket.CompanyEntry> list = st.companies;
+                // l'entreprise choisie a pu disparaître de la liste (dissoute, retirée) : on la désélectionne
+                if (selectedCompany != null && list.stream().noneMatch(c -> c.id().equals(selectedCompany))) {
+                    selectedCompany = null;
+                }
+                int pages = companyPages();
+                companyPage = Math.max(0, Math.min(companyPage, pages - 1));
+                addRenderableWidget(btn(248, 33, 17, 12, "<", AtmButton.DARK, () -> turnCompanyPage(-1))
+                        .enabled(companyPage > 0));
+                addRenderableWidget(btn(267, 33, 17, 12, ">", AtmButton.DARK, () -> turnCompanyPage(1))
+                        .enabled(companyPage < pages - 1));
+                int from = companyPage * PER_PAGE;
+                for (int i = from; i < Math.min(list.size(), from + PER_PAGE); i++) {
+                    StatePacket.CompanyEntry c = list.get(i);
+                    boolean sel = c.id().equals(selectedCompany);
+                    addRenderableWidget(btn(104, 49 + (i - from) * 13, 180, 12, fit(c.name(), 180 - 8),
+                            sel ? CYAN : AtmButton.DARK, () -> selectCompany(c.id())));
+                }
+                amountBox = box(104, 117, 118, "Montant en €");
+                amountBox.setValue(amountText);
+                addRenderableWidget(amountBox);
+                setInitialFocus(amountBox);
+                UUID chosen = selectedCompany;
+                addRenderableWidget(btn(226, 116, 58, 20, "Envoyer", CYAN,
+                        () -> send(Action.TRANSFER_COMPANY, amountInput(), chosen.toString()))
+                        .enabled(chosen != null));
+                back(Page.TRANSFER_CHOICE);
             }
             case LOAN -> {
                 if (st.loanStatus < 0) {
@@ -338,6 +406,16 @@ public class AtmScreen extends Screen {
                     line(g, "Virement", 36, CYAN);
                     line(g, "Destinataire :", 50, TEXT);
                     line(g, "Montant :", 84, TEXT);
+                }
+                case TRANSFER_CHOICE -> {
+                    line(g, "Virement", 36, CYAN);
+                    line(g, "Choisissez le destinataire :", 46, TEXT);
+                }
+                case TRANSFER_COMPANY -> {
+                    line(g, "Virement", 36, CYAN);
+                    String pg = (companyPage + 1) + "/" + companyPages();
+                    g.drawString(font, pg, left + 244 - font.width(pg), top + 35, TEXT, false);
+                    if (st.companies.isEmpty()) line(g, "Aucune entreprise disponible.", 70, TEXT);
                 }
                 case LOAN -> renderLoan(g);
                 default -> { }
