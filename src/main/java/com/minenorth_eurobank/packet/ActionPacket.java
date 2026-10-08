@@ -50,6 +50,10 @@ public class ActionPacket {
         ctx.enqueueWork(() -> {
             ServerPlayer p = ctx.getSender();
             if (p == null || !Network.nearAtm(p)) return;
+            if (com.minenorth_eurobank.items.BusinessCardItem.holdsCard(p)) {
+                Network.sendState(p, false, com.minenorth_eurobank.items.BusinessCardItem.ATM_REFUSAL);
+                return;
+            }
             Network.sendState(p, false, process(p, m.action, m.amount, m.target));
         });
         ctx.setPacketHandled(true);

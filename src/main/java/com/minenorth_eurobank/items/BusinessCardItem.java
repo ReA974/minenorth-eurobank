@@ -17,6 +17,8 @@ import java.util.UUID;
 
 /** Carte d'un compte entreprise. Utilisée en main principale, elle fait payer le compte de l'entreprise. */
 public class BusinessCardItem extends Item {
+    public static final String ATM_REFUSAL = "Cette carte n'est pas reconnue par le distributeur.";
+
     public BusinessCardItem() {
         super(new Item.Properties().stacksTo(1));
     }
@@ -62,5 +64,6 @@ public class BusinessCardItem extends Item {
         if (t == null) return;
         if (t.contains("CompanyName")) tip.add(Component.literal("Entreprise : " + t.getString("CompanyName")).withStyle(ChatFormatting.GRAY));
         if (t.contains("HolderName")) tip.add(Component.literal("Titulaire : " + t.getString("HolderName")).withStyle(ChatFormatting.GRAY));
+        tip.add(Component.literal("Achats uniquement : non reconnue aux distributeurs.").withStyle(ChatFormatting.GRAY));
     }
 }
