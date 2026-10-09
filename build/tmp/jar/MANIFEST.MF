@@ -1,9 +1,0 @@
-Manifest-Version: 1.0
-Specification-Title: minenorth_eurobank
-Specification-Vendor: ReA974
-Specification-Version: 1
-Implementation-Title: minenorth-eurobank
-Implementation-Version: 1.0.0
-Implementation-Vendor: ReA974
-Implementation-Timestamp: 2026-10-08T14:34:52+0200
-
