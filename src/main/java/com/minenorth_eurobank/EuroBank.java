@@ -34,12 +34,10 @@ public class EuroBank {
         IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
         ModBlocks.BLOCKS.register(bus);
         ModItems.ITEMS.register(bus);
-        ModTabs.TABS.register(bus);
         // Braquage de banque (ex-mod minenorthbanque_braque)
         com.minenorth_eurobank.braquage.block.ModBlocks.BLOCKS.register(bus);
         com.minenorth_eurobank.braquage.block.entity.ModBlockEntities.BLOCK_ENTITIES.register(bus);
         com.minenorth_eurobank.braquage.item.ModItems.ITEMS.register(bus);
-        com.minenorth_eurobank.braquage.item.ModCreativeTabs.TABS.register(bus);
         com.minenorth_eurobank.braquage.item.ModSounds.SOUNDS.register(bus);
         com.minenorth_eurobank.braquage.network.ModNetwork.register();
         // Config côté serveur uniquement : le client ne crée aucun fichier (les valeurs par défaut s'appliquent).

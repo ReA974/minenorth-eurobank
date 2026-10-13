@@ -38,6 +38,8 @@ public class BankData extends SavedData {
     private final Map<UUID, TxLog> history = new HashMap<>();
     private final Map<UUID, Loan> loans = new LinkedHashMap<>();
     private long reserve;
+    /** Compte entreprise (la banque RP) dont le solde tient lieu de capital ; null = capital interne. */
+    private UUID institution;
     /** Taux (points de base) appliqué sur la durée du prêt, par durée, dans l'ordre de LoanService.TERMS : 1, 3, 7, 14, 30 jours. */
     private final int[] termRates = {100, 250, 500, 800, 1200};
     private boolean refreshPending;
@@ -85,6 +87,7 @@ public class BankData extends SavedData {
             d.history.put(t.getUUID("id"), log);
         }
         d.reserve = tag.getLong("reserve");
+        if (tag.hasUUID("institution")) d.institution = tag.getUUID("institution");
         if (tag.contains("rates")) {
             int[] r = tag.getIntArray("rates");
             for (int i = 0; i < Math.min(r.length, d.termRates.length); i++) d.termRates[i] = r[i];
@@ -147,6 +150,7 @@ public class BankData extends SavedData {
         });
         tag.put("history", hs);
         tag.putLong("reserve", reserve);
+        if (institution != null) tag.putUUID("institution", institution);
         tag.putIntArray("rates", termRates);
         ListTag bl = new ListTag();
         for (UUID b : bankers) bl.add(NbtUtils.createUUID(b));
@@ -263,6 +267,7 @@ public class BankData extends SavedData {
     }
 
     public void closeBusiness(UUID id) {
+        if (id.equals(institution)) institution = null;   // la banque perd son compte : plus de lien
         business.remove(id);
         listed.remove(id);
         balances.remove(id);
@@ -292,11 +297,40 @@ public class BankData extends SavedData {
     }
 
     // --- capital de la banque (argent disponible pour les prêts)
-    public long reserve() { return reserve; }
+    private boolean linked() { return institution != null && business.contains(institution); }
+
+    public UUID institution() { return linked() ? institution : null; }
+
+    /** Capital disponible : solde du compte de l'entreprise « banque » si elle est reliée, sinon le capital interne. */
+    public long reserve() { return linked() ? balance(institution) : reserve; }
 
     public void addReserve(long delta) {
-        reserve += delta;
+        if (linked()) {
+            add(institution, delta);
+            record(institution, new BankTx(System.currentTimeMillis(), delta >= 0 ? BankTx.INCOME : BankTx.PAYMENT, delta, balance(institution),
+                    delta >= 0 ? "Remboursement de prêt" : "Prêt accordé", null));
+        } else {
+            reserve += delta;
+        }
         setDirty();
+    }
+
+    /** Relie (ou délie avec null) le capital à un compte entreprise. Le capital interne est versé sur le compte à la liaison. */
+    public boolean linkInstitution(UUID account) {
+        if (account == null) {
+            institution = null;
+            setDirty();
+            return true;
+        }
+        if (!business.contains(account)) return false;
+        institution = account;
+        if (reserve != 0) {
+            add(account, reserve);
+            record(account, new BankTx(System.currentTimeMillis(), BankTx.INCOME, reserve, balance(account), "Capital de la banque", null));
+            reserve = 0;
+        }
+        setDirty();
+        return true;
     }
 
     // --- grille des taux

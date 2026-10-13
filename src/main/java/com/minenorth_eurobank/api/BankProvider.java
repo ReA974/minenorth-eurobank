@@ -149,6 +149,16 @@ public final class BankProvider implements fr.minenorth.api.BankService {
     }
 
     @Override
+    public boolean linkBankCapital(MinecraftServer s, UUID accountId) {
+        return BankData.get(s).linkInstitution(accountId);
+    }
+
+    @Override
+    public UUID bankCapitalAccount(MinecraftServer s) {
+        return BankData.get(s).institution();
+    }
+
+    @Override
     public List<BankTx> history(MinecraftServer s, UUID accountId, int limit) {
         return BankData.get(s).history(accountId, limit);
     }

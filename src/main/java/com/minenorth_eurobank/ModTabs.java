@@ -12,16 +12,11 @@ public final class ModTabs {
     public static final DeferredRegister<CreativeModeTab> TABS =
             DeferredRegister.create(Registries.CREATIVE_MODE_TAB, EuroBank.MODID);
 
-    public static final RegistryObject<CreativeModeTab> MAIN = TABS.register("main", () ->
-            CreativeModeTab.builder()
-                    .title(Component.translatable("itemGroup.minenorth_eurobank"))
-                    .icon(() -> new ItemStack(ModItems.MONEY.get(Denomination.B50).get()))
-                    .displayItems((params, out) -> {
+    public static final net.minecraft.world.item.CreativeModeTab.DisplayItemsGenerator TAB_ITEMS = (params, out) -> {
                         ModItems.MONEY.values().forEach(r -> out.accept(r.get()));
                         out.accept(ModItems.ATM_ITEM.get());
                         out.accept(ModItems.ATM_BASE_ITEM.get());
-                    })
-                    .build());
+                    };
 
     private ModTabs() {}
 }
