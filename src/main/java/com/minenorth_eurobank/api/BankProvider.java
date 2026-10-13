@@ -149,6 +149,20 @@ public final class BankProvider implements fr.minenorth.api.BankService {
     }
 
     @Override
+    public long adjust(MinecraftServer s, UUID accountId, long deltaCents, String label, String actor) {
+        BankData d = BankData.get(s);
+        if (!d.has(accountId)) return -1;
+        long before = d.balance(accountId);
+        long after = Math.max(0, Math.min(1_000_000_000_00L, before + deltaCents));   // 1 milliard d'euros, comme le panneau admin
+        long applied = after - before;
+        if (applied != 0) {
+            d.add(accountId, applied);
+            record(s, accountId, applied, applied > 0 ? BankTx.INCOME : BankTx.PAYMENT, label, actor);
+        }
+        return after;
+    }
+
+    @Override
     public boolean linkBankCapital(MinecraftServer s, UUID accountId) {
         return BankData.get(s).linkInstitution(accountId);
     }
