@@ -40,21 +40,13 @@ public class BankCardItem extends Item {
         return t != null && t.hasUUID("Owner") ? t.getUUID("Owner") : null;
     }
 
+    /** Carte à soi sur le joueur (inventaire ou portefeuille). */
     public static boolean hasOwnCard(Player p) {
-        Inventory inv = p.getInventory();
-        for (int i = 0; i < inv.getContainerSize(); i++) {
-            ItemStack s = inv.getItem(i);
-            if (s.getItem() instanceof BankCardItem && p.getUUID().equals(owner(s))) return true;
-        }
-        return false;
+        return fr.minenorth.api.Carried.has(p, s -> s.getItem() instanceof BankCardItem && p.getUUID().equals(owner(s)));
     }
 
     public static boolean hasAnyCard(Player p) {
-        Inventory inv = p.getInventory();
-        for (int i = 0; i < inv.getContainerSize(); i++) {
-            if (inv.getItem(i).getItem() instanceof BankCardItem) return true;
-        }
-        return false;
+        return fr.minenorth.api.Carried.has(p, s -> s.getItem() instanceof BankCardItem);
     }
 
     /** Clic droit dans le vide avec sa carte : solde du compte (et prêt en cours) dans le chat. */

@@ -35,24 +35,13 @@ public final class Money {
         return s.getItem() instanceof MoneyItem m ? m.cents * s.getCount() : 0;
     }
 
+    /** Espèces sur le joueur : inventaire et portefeuilles. */
     public static long cashIn(Player p) {
-        Inventory inv = p.getInventory();
-        long t = 0;
-        for (int i = 0; i < inv.getContainerSize(); i++) t += value(inv.getItem(i));
-        return t;
+        return fr.minenorth.api.Carried.sum(p, Money::value);
     }
 
     public static long takeAllCash(Player p) {
-        Inventory inv = p.getInventory();
-        long t = 0;
-        for (int i = 0; i < inv.getContainerSize(); i++) {
-            long v = value(inv.getItem(i));
-            if (v > 0) {
-                t += v;
-                inv.setItem(i, ItemStack.EMPTY);
-            }
-        }
-        return t;
+        return fr.minenorth.api.Carried.takeAll(p, Money::value);
     }
 
     public static List<ItemStack> change(long cents) {
