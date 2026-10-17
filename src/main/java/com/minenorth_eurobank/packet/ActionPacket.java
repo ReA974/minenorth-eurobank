@@ -57,6 +57,10 @@ public class ActionPacket {
         ctx.enqueueWork(() -> {
             ServerPlayer p = ctx.getSender();
             if (p == null || !Network.nearAtm(p)) return;
+            if (!Network.allowAction(p)) {
+                Network.sendState(p, false, "Une seconde... une opération à la fois.");
+                return;
+            }
             if (com.minenorth_eurobank.items.BusinessCardItem.holdsCard(p)) {
                 Network.sendState(p, false, com.minenorth_eurobank.items.BusinessCardItem.ATM_REFUSAL);
                 return;
@@ -117,7 +121,9 @@ public class ActionPacket {
                 String name = target.trim();
                 if (amount <= 0) return "Montant invalide.";
                 UUID to = d.findByName(name);
-                if (to == null) return "Aucun compte au nom de " + name + ".";
+                if (to == null) return d.rpNameAmbiguous(name)
+                        ? "Plusieurs comptes portent le nom " + name + " : utilisez le pseudo Minecraft exact du destinataire."
+                        : "Aucun compte au nom de " + name + ".";
                 if (to.equals(id)) return "Vous ne pouvez pas vous payer vous-même.";
                 if (d.balance(id) < amount) return "Solde insuffisant.";
                 d.add(id, -amount);

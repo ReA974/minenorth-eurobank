@@ -33,11 +33,11 @@ public final class Network {
 
     public static void register() {
         int id = 0;
-        CHANNEL.registerMessage(id++, ActionPacket.class, ActionPacket::encode, ActionPacket::decode, ActionPacket::handle);
-        CHANNEL.registerMessage(id++, StatePacket.class, StatePacket::encode, StatePacket::decode, StatePacket::handle);
-        CHANNEL.registerMessage(id++, BankerPacket.class, BankerPacket::encode, BankerPacket::decode, BankerPacket::handle);
-        CHANNEL.registerMessage(id++, BankerListPacket.class, BankerListPacket::encode, BankerListPacket::decode, BankerListPacket::handle);
-        CHANNEL.registerMessage(id++, WatchPacket.class, WatchPacket::encode, WatchPacket::decode, WatchPacket::handle);
+        CHANNEL.registerMessage(id++, ActionPacket.class, ActionPacket::encode, ActionPacket::decode, ActionPacket::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(id++, StatePacket.class, StatePacket::encode, StatePacket::decode, StatePacket::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(id++, BankerPacket.class, BankerPacket::encode, BankerPacket::decode, BankerPacket::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(id++, BankerListPacket.class, BankerListPacket::encode, BankerListPacket::decode, BankerListPacket::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(id++, WatchPacket.class, WatchPacket::encode, WatchPacket::decode, WatchPacket::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER));
     }
 
     public static void openAtm(ServerPlayer p, BlockPos pos) {
@@ -54,6 +54,7 @@ public final class Network {
     }
 
     public static void unwatchAll(UUID id) {
+        LAST_ACTION.remove(id);
         WATCH_ATM.remove(id);
         WATCH_BANKER.remove(id);
     }
@@ -68,6 +69,19 @@ public final class Network {
             if (WATCH_BANKER.contains(id) && LoanService.isBanker(p)) sendBankerList(p, false, "");
         }
     }
+
+    /** Dernière action acceptée à l'ATM par joueur (nanosecondes) : une seule action toutes les 0,3 s. */
+    private static final Map<UUID, Long> LAST_ACTION = new ConcurrentHashMap<>();
+
+    public static boolean allowAction(ServerPlayer p) {
+        long now = System.nanoTime();
+        Long last = LAST_ACTION.get(p.getUUID());
+        if (last != null && now - last < 300_000_000L) return false;
+        LAST_ACTION.put(p.getUUID(), now);
+        return true;
+    }
+
+    public static void forgetAction(UUID id) { LAST_ACTION.remove(id); }
 
     public static boolean nearAtm(ServerPlayer p) {
         BlockPos pos = SESSIONS.get(p.getUUID());

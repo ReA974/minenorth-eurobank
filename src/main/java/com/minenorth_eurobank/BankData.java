@@ -221,10 +221,26 @@ public class BankData extends SavedData {
         for (Map.Entry<UUID, String> e : names.entrySet()) {
             if (e.getValue().equalsIgnoreCase(name) && balances.containsKey(e.getKey()) && !business.contains(e.getKey())) return e.getKey();
         }
+        UUID found = null;
         for (UUID id : balances.keySet()) {
-            if (!business.contains(id) && name(id).equalsIgnoreCase(name)) return id;
+            if (!business.contains(id) && name(id).equalsIgnoreCase(name)) {
+                if (found != null) return null;   // nom RP porté par plusieurs comptes : on ne devine pas
+                found = id;
+            }
         }
-        return null;
+        return found;
+    }
+
+    /** Vrai si plusieurs comptes joueurs portent ce nom RP (et qu'aucun pseudo Minecraft ne correspond exactement). */
+    public boolean rpNameAmbiguous(String name) {
+        for (Map.Entry<UUID, String> e : names.entrySet()) {
+            if (e.getValue().equalsIgnoreCase(name) && balances.containsKey(e.getKey()) && !business.contains(e.getKey())) return false;
+        }
+        int n = 0;
+        for (UUID id : balances.keySet()) {
+            if (!business.contains(id) && name(id).equalsIgnoreCase(name) && ++n > 1) return true;
+        }
+        return false;
     }
 
     /** Comptes joueurs uniquement (les comptes entreprise sont exclus). */
