@@ -86,6 +86,14 @@ public class EuroBank {
                     sp.sendSystemMessage(Component.literal("[Banque] " + pending
                             + " demande(s) de prêt en attente. Ouvrez votre tablette ou tapez /bank banquier."));
                 }
+                long contacts = d.openContacts();
+                if (contacts > 0) {
+                    sp.sendSystemMessage(Component.literal("[Banque] " + contacts + " client(s) souhaitent que vous les rappeliez."));
+                }
+                long alerts = d.openAlerts();
+                if (alerts > 0) {
+                    sp.sendSystemMessage(Component.literal("§c[Banque] " + alerts + " alerte(s) à traiter sur la tablette."));
+                }
             }
         }
     }

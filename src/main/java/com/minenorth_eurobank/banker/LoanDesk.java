@@ -33,6 +33,17 @@ public final class LoanDesk {
         send(p, true, "");
     }
 
+    /** Menu principal du guichet (PNJ banquier) : prêt, contact du banquier, achats. */
+    public static void openMenu(ServerPlayer p) {
+        SESSIONS.put(p.getUUID(), new Session(p.position(), p.level().dimension().location().toString(), System.currentTimeMillis()));
+        sendMenu(p, true, "");
+    }
+
+    public static void sendMenu(ServerPlayer p, boolean open, String message) {
+        Network.CHANNEL.send(PacketDistributor.PLAYER.with(() -> p), new DeskPacket(open, message, DeskPacket.MENU, 0, "",
+                BankData.get(p.server).termRates()));
+    }
+
     public static boolean valid(ServerPlayer p) {
         Session s = SESSIONS.get(p.getUUID());
         return s != null && System.currentTimeMillis() - s.openedMs() <= SESSION_MS

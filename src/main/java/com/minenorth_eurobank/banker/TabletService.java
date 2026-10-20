@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** Logique serveur de la tablette banquier : construit les vues (NBT) et applique les actions. */
 public final class TabletService {
-    public static final int TAB_LOANS = 0, TAB_ACCOUNTS = 1, TAB_TX = 2, TAB_ALERTS = 3, TAB_RATES = 4;
+    public static final int TAB_LOANS = 0, TAB_ACCOUNTS = 1, TAB_TX = 2, TAB_ALERTS = 3, TAB_CONTACTS = 4, TAB_RATES = 5;
     public static final int MAX_ROWS = 200;
     public static final int NOTE_MAX = 200;
 
@@ -70,6 +70,19 @@ public final class TabletService {
             case HANDLE_ALL:
                 d.handleAllAlerts();
                 return "Toutes les alertes sont traitées.";
+            case GRANT: {
+                // text = "jours;tauxBp", num = montant en centimes
+                String[] parts = text == null ? new String[0] : text.split(";");
+                if (parts.length != 2) return "Prêt invalide.";
+                try {
+                    return LoanService.grant(s, id, num, Integer.parseInt(parts[0].trim()), Integer.parseInt(parts[1].trim()));
+                } catch (NumberFormatException e) {
+                    return "Prêt invalide.";
+                }
+            }
+            case HANDLE_CONTACT:
+                d.handleContact(id);
+                return "";
             case SET_THRESHOLD:
                 if (num < 100_00L || num > 100_000_000_00L) return "Seuil invalide (100 € à 100 000 000 €).";
                 d.setAlertThreshold(num);
@@ -98,15 +111,17 @@ public final class TabletService {
         out.putString("msg", message == null ? "" : message);
         out.putLong("reserve", d.reserve());
         out.putInt("alerts", (int) d.openAlerts());
+        out.putInt("contacts", (int) d.openContacts());
         out.putLong("threshold", d.alertThreshold());
         out.putIntArray("rates", d.termRates());
         if (v.selected() != null) out.putUUID("sel", v.selected());
         ListTag rows = new ListTag();
         switch (v.tab()) {
             case TAB_LOANS -> loans(d, v, rows);
-            case TAB_ACCOUNTS -> accounts(d, v, out, rows);
+            case TAB_ACCOUNTS -> accounts(s, d, v, out, rows);
             case TAB_TX -> transactions(d, v, out, rows);
             case TAB_ALERTS -> alerts(d, v, rows);
+            case TAB_CONTACTS -> contacts(d, v, rows);
             default -> { }
         }
         out.put("rows", rows);
@@ -191,7 +206,30 @@ public final class TabletService {
         }
     }
 
-    private static void accounts(BankData d, View v, CompoundTag out, ListTag rows) {
+    private static void contacts(BankData d, View v, ListTag rows) {
+        List<BankData.Contact> list = new ArrayList<>(d.contacts());
+        Collections.reverse(list);
+        int n = 0;
+        for (BankData.Contact c : list) {
+            if (n++ >= MAX_ROWS) break;
+            String date = LoanService.date(c.time);
+            CompoundTag r = row(c.id, (c.handled ? "" : "! ") + c.first + " " + c.last + "  -  tél. " + c.phone,
+                    date.substring(0, 5) + " " + date.substring(11), c.handled ? 0 : 1);
+            r.putUUID("a", c.player);
+            r.putBoolean("done", c.handled);
+            if (c.id.equals(v.selected())) {
+                List<String> x = new ArrayList<>();
+                x.add("Le " + date + (c.handled ? "  (traité)" : ""));
+                x.add("Contact : " + c.first + " " + c.last + "  |  Tél. " + c.phone);
+                x.add("Compte : " + (d.has(c.player) ? d.name(c.player) : "aucun"));
+                wrap(x, "Demande : ", c.message, 52);
+                details(r, x);
+            }
+            rows.add(r);
+        }
+    }
+
+    private static void accounts(MinecraftServer s, BankData d, View v, CompoundTag out, ListTag rows) {
         List<UUID> ids = new ArrayList<>(d.accountIds());
         ids.sort(Comparator.comparing((UUID i) -> d.name(i).toLowerCase(Locale.ROOT)));
         int n = 0;
@@ -199,7 +237,9 @@ public final class TabletService {
             if (n++ >= 300) break;
             boolean biz = d.isBusiness(id);
             boolean fz = d.isFrozen(id);
-            CompoundTag r = row(id, (biz ? "[Ent.] " : "") + d.name(id), (fz ? "GELÉ  " : "") + Money.format(d.balance(id)), fz ? 2 : 0);
+            boolean online = !biz && s.getPlayerList().getPlayer(id) != null;
+            CompoundTag r = row(id, (biz ? "[Ent.] " : online ? "(en ligne) " : "") + d.name(id),
+                    (fz ? "GELÉ  " : "") + Money.format(d.balance(id)), fz ? 2 : 0);
             r.putUUID("a", id);
             r.putBoolean("fz", fz);
             if (id.equals(v.selected())) {

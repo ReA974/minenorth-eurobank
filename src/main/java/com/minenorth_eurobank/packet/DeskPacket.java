@@ -11,7 +11,7 @@ import java.util.function.Supplier;
 
 /** Serveur -> client : état du guichet de prêt (formulaire de demande) du joueur. */
 public class DeskPacket {
-    public static final int NO_ACCOUNT = 0, FREE = 1, PENDING = 2, RUNNING = 3;
+    public static final int NO_ACCOUNT = 0, FREE = 1, PENDING = 2, RUNNING = 3, MENU = 4;
 
     public final boolean open;
     public final String message;

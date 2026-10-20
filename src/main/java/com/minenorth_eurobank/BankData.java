@@ -129,6 +129,12 @@ public class BankData extends SavedData {
             d.alerts.add(new Alert(a.getUUID("id"), a.getLong("time"), a.getUUID("account"), a.getString("text"),
                     a.getLong("cents"), a.getBoolean("handled")));
         }
+        ListTag ct = tag.getList("contacts", Tag.TAG_COMPOUND);
+        for (int i = 0; i < ct.size(); i++) {
+            CompoundTag c = ct.getCompound(i);
+            d.contacts.add(new Contact(c.getUUID("id"), c.getLong("time"), c.getUUID("player"), c.getString("first"),
+                    c.getString("last"), c.getString("phone"), c.getString("message"), c.getBoolean("handled")));
+        }
         if (tag.contains("threshold")) d.alertThreshold = tag.getLong("threshold");
         d.lastHeistMs = tag.getLong("heist");
         d.reserve = tag.getLong("reserve");
@@ -217,6 +223,20 @@ public class BankData extends SavedData {
             al.add(t);
         }
         tag.put("alerts", al);
+        ListTag ct = new ListTag();
+        for (Contact c : contacts) {
+            CompoundTag t = new CompoundTag();
+            t.putUUID("id", c.id);
+            t.putLong("time", c.time);
+            t.putUUID("player", c.player);
+            t.putString("first", c.first);
+            t.putString("last", c.last);
+            t.putString("phone", c.phone);
+            t.putString("message", c.message);
+            t.putBoolean("handled", c.handled);
+            ct.add(t);
+        }
+        tag.put("contacts", ct);
         tag.putLong("threshold", alertThreshold);
         tag.putLong("heist", lastHeistMs);
         tag.putLong("reserve", reserve);
@@ -404,6 +424,58 @@ public class BankData extends SavedData {
                 }
             }
         }
+    }
+
+    // --- demandes de contact (« Contacter mon banquier » au guichet)
+    public static final int MAX_CONTACTS = 100;
+
+    /** Demande de rappel laissée par un joueur au guichet. */
+    public static final class Contact {
+        public final UUID id;
+        public final long time;
+        public final UUID player;
+        public final String first, last, phone, message;
+        public boolean handled;
+
+        public Contact(UUID id, long time, UUID player, String first, String last, String phone, String message, boolean handled) {
+            this.id = id;
+            this.time = time;
+            this.player = player;
+            this.first = first;
+            this.last = last;
+            this.phone = phone;
+            this.message = message;
+            this.handled = handled;
+        }
+    }
+
+    private final List<Contact> contacts = new ArrayList<>();
+
+    public List<Contact> contacts() { return Collections.unmodifiableList(contacts); }
+
+    public long openContacts() { return contacts.stream().filter(c -> !c.handled).count(); }
+
+    public void addContact(UUID player, String first, String last, String phone, String message) {
+        contacts.add(new Contact(UUID.randomUUID(), System.currentTimeMillis(), player, first, last, phone, message, false));
+        while (contacts.size() > MAX_CONTACTS) contacts.remove(0);
+        setDirty();
+        if (server != null) {
+            for (net.minecraft.server.level.ServerPlayer sp : server.getPlayerList().getPlayers()) {
+                if (bankers.contains(sp.getUUID())) {
+                    sp.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                            "§6[Banque] " + first + " " + last + " souhaite vous contacter (tél. " + phone + ")."));
+                }
+            }
+        }
+    }
+
+    public boolean hasOpenContact(UUID player) {
+        for (Contact c : contacts) if (!c.handled && c.player.equals(player)) return true;
+        return false;
+    }
+
+    public void handleContact(UUID id) {
+        for (Contact c : contacts) if (c.id.equals(id) && !c.handled) { c.handled = true; setDirty(); }
     }
 
     public List<Alert> alerts() { return Collections.unmodifiableList(alerts); }

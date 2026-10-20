@@ -45,6 +45,10 @@ public class TabletPacket {
         return new TabletPacket(op, 0, id, null, 0, text, null);
     }
 
+    public static TabletPacket text(TabletOp op, UUID id, String text, long num) {
+        return new TabletPacket(op, 0, id, null, num, text, null);
+    }
+
     public static TabletPacket rates(int[] rates) {
         return new TabletPacket(TabletOp.SET_RATES, 0, null, null, 0, "", rates);
     }

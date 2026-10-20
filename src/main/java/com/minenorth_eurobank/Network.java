@@ -18,7 +18,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class Network {
-    private static final String PROTOCOL = "8";   // 8 : tablette banquier (TabletPacket, TabletDataPacket) et guichet de prêt (DeskPacket, DeskSubmitPacket)
+    private static final String PROTOCOL = "9";   // 8 : tablette banquier (TabletPacket, TabletDataPacket) et guichet de prêt (DeskPacket, DeskSubmitPacket)
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(EuroBank.MODID, "main"), () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
 
@@ -40,6 +40,7 @@ public final class Network {
         CHANNEL.registerMessage(id++, WatchPacket.class, WatchPacket::encode, WatchPacket::decode, WatchPacket::handle);
         CHANNEL.registerMessage(id++, DeskPacket.class, DeskPacket::encode, DeskPacket::decode, DeskPacket::handle);
         CHANNEL.registerMessage(id++, DeskSubmitPacket.class, DeskSubmitPacket::encode, DeskSubmitPacket::decode, DeskSubmitPacket::handle);
+        CHANNEL.registerMessage(id++, DeskMenuPacket.class, DeskMenuPacket::encode, DeskMenuPacket::decode, DeskMenuPacket::handle);
     }
 
     public static void openAtm(ServerPlayer p, BlockPos pos) {

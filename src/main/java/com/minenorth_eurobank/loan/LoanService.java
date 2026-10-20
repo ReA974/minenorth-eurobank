@@ -97,6 +97,22 @@ public final class LoanService {
         return "Demande envoyée. Le banquier vous rappellera au " + l.phone + ".";
     }
 
+    /** Prêt accordé directement par le banquier depuis la tablette, sans passer par une demande. */
+    public static String grant(MinecraftServer s, UUID account, long amount, int days, int rateBp) {
+        BankData d = BankData.get(s);
+        if (!d.has(account)) return "Compte introuvable.";
+        if (amount < MIN || amount > MAX) return "Montant : entre " + Money.format(MIN) + " et " + Money.format(MAX) + ".";
+        if (!validTerm(days)) return "Durée invalide.";
+        if (rateBp < 0 || rateBp > MAX_RATE_BP) return "Taux invalide (0 à " + (MAX_RATE_BP / 100) + " %).";
+        if (d.openLoanOf(account) != null) return d.name(account) + " a déjà un prêt ou une demande en cours.";
+        if (d.reserve() < amount) return "Capital insuffisant : " + Money.format(d.reserve()) + " disponibles.";
+        Loan l = new Loan(UUID.randomUUID(), account, amount, days, System.currentTimeMillis());
+        l.type = 4;
+        l.reason = "Accordé par le banquier";
+        d.addLoan(l);
+        return approve(s, l.id, rateBp);
+    }
+
     /** Score de fiabilité 0-100 d'un client d'après ses prêts passés (50 = aucun historique). */
     public static int trust(BankData d, UUID account) {
         int score = 50;

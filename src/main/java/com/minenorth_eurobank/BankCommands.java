@@ -28,7 +28,14 @@ public final class BankCommands {
                                 .then(Commands.argument("amount", DoubleArgumentType.doubleArg(0.01))
                                         .executes(BankCommands::pay))))
                 .then(Commands.literal("banquier").executes(BankCommands::openBanker))
-                // Pour un PNJ Custom NPC : /bank pret @dp  (ouvre le guichet de demande de prêt du joueur ciblé)
+                // Pour un PNJ Custom NPC : /bank guichet @dp  (menu : prêt, contacter le banquier, achats)
+                .then(Commands.literal("guichet").requires(s -> s.hasPermission(2))
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .executes(c -> {
+                                    com.minenorth_eurobank.banker.LoanDesk.openMenu(EntityArgument.getPlayer(c, "player"));
+                                    return 1;
+                                })))
+                // /bank pret @dp ouvre directement le formulaire de demande de prêt
                 .then(Commands.literal("pret").requires(s -> s.hasPermission(2))
                         .then(Commands.argument("player", EntityArgument.player())
                                 .executes(BankCommands::openLoanDesk)))

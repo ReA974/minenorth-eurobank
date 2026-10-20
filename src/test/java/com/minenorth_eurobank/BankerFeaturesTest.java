@@ -95,6 +95,22 @@ class BankerFeaturesTest {
     }
 
     @Test
+    void contactRequestsSurviveSaveAndBlockDuplicates() {
+        BankData d = new BankData();
+        UUID p = UUID.randomUUID();
+        assertFalse(d.hasOpenContact(p));
+        d.addContact(p, "Jean", "Dupont", "1234", "Je veux un rappel");
+        assertTrue(d.hasOpenContact(p));
+        assertEquals(1, d.openContacts());
+        BankData r = BankData.load(d.save(new CompoundTag()));
+        assertEquals(1, r.contacts().size());
+        assertEquals("Dupont", r.contacts().get(0).last);
+        r.handleContact(r.contacts().get(0).id);
+        assertFalse(r.hasOpenContact(p));
+        assertEquals(0, r.openContacts());
+    }
+
+    @Test
     void recentMergesAccountsNewestFirst() {
         BankData d = new BankData();
         UUID a = UUID.randomUUID(), b = UUID.randomUUID();

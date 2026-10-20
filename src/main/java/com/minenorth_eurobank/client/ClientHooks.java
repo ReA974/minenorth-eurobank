@@ -25,6 +25,12 @@ public final class ClientHooks {
 
     public static void handleDesk(DeskPacket m) {
         Minecraft mc = Minecraft.getInstance();
+        if (m.state == DeskPacket.MENU) {
+            if (m.open) mc.setScreen(new DeskMenuScreen());
+            else if (mc.screen instanceof ContactScreen s) s.update(m.message);
+            else if (mc.screen instanceof DeskMenuScreen s) s.update(m.message);
+            return;
+        }
         if (mc.screen instanceof LoanDeskScreen s) s.update(m);
         else if (m.open) mc.setScreen(new LoanDeskScreen(m));
     }
