@@ -220,7 +220,7 @@ public class TabletScreen extends Screen {
     private void initGrant(int by) {
         grantAmountBox = new EditBox(font, left + 80, top + 134, 80, 16, Component.literal("Montant"));
         grantAmountBox.setHint(Component.literal("Montant en €"));
-        grantAmountBox.setMaxLength(9);
+        grantAmountBox.setMaxLength(12);
         grantAmountBox.setValue(grantAmountText);
         addRenderableWidget(grantAmountBox);
         for (int i = 0; i < N_TERMS; i++) {

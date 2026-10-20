@@ -22,11 +22,6 @@
                                                                                 "source":  "OwnerName",
                                                                                 "target":  "BlockEntityTag.OwnerName",
                                                                                 "op":  "replace"
-                                                                            },
-                                                                            {
-                                                                                "source":  "Items",
-                                                                                "target":  "BlockEntityTag.Items",
-                                                                                "op":  "replace"
                                                                             }
                                                                         ]
                                                             }

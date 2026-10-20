@@ -4,7 +4,6 @@ import com.minenorth_eurobank.Money;
 import com.minenorth_eurobank.api.BankApi;
 import com.minenorth_eurobank.api.PayResult;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 
@@ -21,7 +20,6 @@ public final class SafeShop {
         CompoundTag be = new CompoundTag();
         be.putUUID("Owner", p.getUUID());
         be.putString("OwnerName", fr.minenorth.api.MineNorth.displayName(p));
-        be.put("Items", new ListTag());
         stack.getOrCreateTag().put("BlockEntityTag", be);
         Money.giveStack(p, stack);
         return "Coffre-fort " + tier.label + " acheté (" + Money.format(tier.price) + "). Il est dans votre inventaire.";

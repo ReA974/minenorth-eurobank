@@ -119,7 +119,7 @@ public class LoanDeskScreen extends Screen {
             return;
         }
 
-        amountBox = box(16, 52, 80, "Montant en €", 9);
+        amountBox = box(16, 52, 80, "Montant en €", 12);
         amountBox.setValue(amountText);
         downBox = box(176, 52, 80, "Apport en €", 9);
         downBox.setValue(downText);

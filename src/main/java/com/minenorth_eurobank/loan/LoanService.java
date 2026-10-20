@@ -17,7 +17,8 @@ import java.util.UUID;
 /** Règles et opérations sur les prêts. Tout est exécuté côté serveur. */
 public final class LoanService {
     public static final long MIN = 100_00L;
-    public static final long MAX = 25_000_00L;
+    /** Pas de plafond métier : le banquier décide. Seulement une limite technique (1 milliard d'euros) contre les débordements. */
+    public static final long MAX = 1_000_000_000_00L;
     public static final int MAX_RATE_BP = 10_000;      // 100 %
     public static final int[] TERMS = {1, 3, 7, 14, 30};
     public static final String[] TYPES = {"Personnel", "Immobilier", "Véhicule", "Entreprise", "Autre"};

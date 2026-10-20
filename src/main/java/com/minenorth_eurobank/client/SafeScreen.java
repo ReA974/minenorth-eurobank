@@ -49,17 +49,16 @@ public class SafeScreen extends AbstractContainerScreen<SafeMenu> {
         int gridRows = tier.rows();
         g.fill(x + 6, y + 22, x + imageWidth - 6, y + 28 + gridRows * 18 + 4, 0xFF1B1560);
         for (Slot s : menu.slots) {
-            g.fill(x + s.x - 1, y + s.y - 1, x + s.x + 17, y + s.y + 17, SLOT);
             boolean safeSlot = s.index < tier.slots && s.container != minecraft.player.getInventory();
-            g.fill(x + s.x - 1, y + s.y - 1, x + s.x + 17, y + s.y, safeSlot ? accent : 0xFF2A2468);
+            // cadre de 18x18 puis fond de 16x16 : les emplacements voisins restent séparés
+            g.fill(x + s.x - 1, y + s.y - 1, x + s.x + 17, y + s.y + 17, safeSlot ? accent : 0xFF2A2468);
+            g.fill(x + s.x, y + s.y, x + s.x + 16, y + s.y + 16, SLOT);
         }
     }
 
     @Override
     protected void renderLabels(GuiGraphics g, int mx, int my) {
         g.drawString(font, title, 8, 8, 0xFFFFFFFF, false);
-        String cap = menu.tier().slots + " emplacements";
-        g.drawString(font, cap, imageWidth - 8 - font.width(cap), 8, accent, false);
         g.drawString(font, playerInventoryTitle, 16, inventoryLabelY, 0xFFCFE3FF, false);
     }
 }

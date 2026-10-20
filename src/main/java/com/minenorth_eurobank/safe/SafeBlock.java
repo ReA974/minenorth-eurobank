@@ -2,11 +2,13 @@ package com.minenorth_eurobank.safe;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.MenuProvider;
+import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -82,15 +84,28 @@ public class SafeBlock extends BaseEntityBlock {
             sp.displayClientMessage(Component.literal("§cCe coffre-fort ne vous appartient pas."), true);
             return InteractionResult.CONSUME;
         }
+        // contenu rattaché au joueur (comme un ender chest), pas au bloc
+        SimpleContainer storage = SafeStorage.get(sp.server).container(sp.getUUID(), tier);
+        ListTag legacy = be.takeLegacyItems();
+        if (legacy != null) {
+            SimpleContainer old = new SimpleContainer(64);
+            old.fromTag(legacy);
+            for (int i = 0; i < old.getContainerSize(); i++) {
+                ItemStack s = old.getItem(i);
+                if (s.isEmpty()) continue;
+                ItemStack rest = storage.addItem(s);
+                if (!rest.isEmpty()) popResource(level, pos, rest);
+            }
+        }
         NetworkHooks.openScreen(sp, new MenuProvider() {
             @Override
             public Component getDisplayName() {
-                return Component.literal("Coffre-fort " + tier.label);
+                return Component.literal("Coffre-fort " + tier.label + " (" + tier.slots + ")");
             }
 
             @Override
             public AbstractContainerMenu createMenu(int id, Inventory inv, Player p) {
-                return new SafeMenu(id, inv, be.items(), tier, ContainerLevelAccess.create(level, pos));
+                return new SafeMenu(id, inv, storage, tier, ContainerLevelAccess.create(level, pos));
             }
         }, buf -> buf.writeVarInt(tier.ordinal()));
         return InteractionResult.CONSUME;

@@ -29,6 +29,6 @@ public class SafeItem extends BlockItem {
         if (be != null && !be.getString("OwnerName").isEmpty()) {
             tip.add(Component.literal("Propriétaire : " + be.getString("OwnerName")).withStyle(ChatFormatting.AQUA));
         }
-        tip.add(Component.literal("Seul son propriétaire peut l'ouvrir.").withStyle(ChatFormatting.DARK_GRAY));
+        tip.add(Component.literal("Seul son propriétaire peut l'ouvrir. Son contenu le suit (comme un ender chest).").withStyle(ChatFormatting.DARK_GRAY));
     }
 }

@@ -54,7 +54,7 @@ class BankerFeaturesTest {
         for (com.minenorth_eurobank.safe.SafeTier t : com.minenorth_eurobank.safe.SafeTier.values()) {
             assertTrue(t.rows() * t.cols >= t.slots, "la grille doit contenir tous les emplacements");
         }
-        assertEquals(25_000_00L, LoanService.MAX, "plafond des prêts");
+        assertTrue(LoanService.MAX >= 1_000_000_00L, "pas de plafond métier sur les prêts (700 000 € doit passer)");
     }
 
     @Test
