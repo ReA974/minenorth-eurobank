@@ -83,6 +83,17 @@ public final class TabletService {
             case HANDLE_CONTACT:
                 d.handleContact(id);
                 return "";
+            case LINK: {
+                if (!d.isBusiness(id)) return "Compte d'entreprise introuvable.";
+                if (!d.linkInstitution(id)) return "Impossible de relier ce compte.";
+                return "La banque est reliée à " + d.name(id) + ". Capital : " + Money.format(d.reserve()) + ".";
+            }
+            case UNLINK: {
+                if (d.institution() == null) return "La banque n'est reliée à aucune entreprise.";
+                String was = d.name(d.institution());
+                d.linkInstitution(null);
+                return "La banque n'est plus reliée à " + was + ". Capital interne : " + Money.format(d.reserve()) + ".";
+            }
             case DELETE_CONTACT:
                 d.deleteContact(id);
                 return "Demande de contact supprimée.";
@@ -150,6 +161,7 @@ public final class TabletService {
             case TAB_ALERTS -> alerts(d, v, rows);
             case TAB_CONTACTS -> contacts(d, v, rows);
             case TAB_REPORT -> report(d, v, rows);
+            case TAB_RATES -> rates(d, out);
             default -> { }
         }
         out.put("rows", rows);
@@ -239,6 +251,26 @@ public final class TabletService {
                 details(r, x);
             }
             rows.add(r);
+        }
+    }
+
+    /** Onglet Taux/réglages : entreprises disponibles pour porter le capital de la banque, et celle qui est liée. */
+    private static void rates(BankData d, CompoundTag out) {
+        ListTag biz = new ListTag();
+        List<UUID> ids = new ArrayList<>(d.businesses());
+        ids.sort(Comparator.comparing((UUID i) -> d.name(i).toLowerCase(Locale.ROOT)));
+        for (UUID id : ids) {
+            if (biz.size() >= 200) break;
+            CompoundTag c = new CompoundTag();
+            c.putUUID("id", id);
+            c.putString("name", clip(d.name(id), 40));
+            biz.add(c);
+        }
+        out.put("biz", biz);
+        UUID inst = d.institution();
+        if (inst != null) {
+            out.putUUID("inst", inst);
+            out.putString("instName", clip(d.name(inst), 40));
         }
     }
 

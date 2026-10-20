@@ -53,6 +53,12 @@ public class TabletScreen extends Screen {
     private int tab;
     private long reserve, threshold;
     private int openAlerts, openContacts;
+    // entreprises pouvant porter le capital de la banque, et celle qui est liée
+    private final List<UUID> bizIds = new ArrayList<>();
+    private final List<String> bizNames = new ArrayList<>();
+    private int bizIdx;
+    private UUID instId;
+    private String instName = "";
     private boolean granting;
     private String searchText = "", grantAmountText = "", grantRateText = "";
     private int grantTerm = 7, remindIdx = 1, waiveIdx = 1;
@@ -104,6 +110,19 @@ public class TabletScreen extends Screen {
                     c.hasUUID("a") ? c.getUUID("a") : null, c.getInt("s"), c.getInt("rate"),
                     c.getBoolean("fz"), c.getBoolean("done"), d));
         }
+        UUID previous = bizIds.isEmpty() ? null : bizIds.get(Math.min(bizIdx, bizIds.size() - 1));
+        bizIds.clear();
+        bizNames.clear();
+        ListTag biz = t.getList("biz", Tag.TAG_COMPOUND);
+        for (int i = 0; i < biz.size(); i++) {
+            bizIds.add(biz.getCompound(i).getUUID("id"));
+            bizNames.add(biz.getCompound(i).getString("name"));
+        }
+        instId = t.hasUUID("inst") ? t.getUUID("inst") : null;
+        instName = t.getString("instName");
+        // on garde la sélection de l'utilisateur ; sinon on se place sur l'entreprise déjà liée
+        int keep = previous == null ? -1 : bizIds.indexOf(previous);
+        bizIdx = keep >= 0 ? keep : Math.max(0, instId == null ? 0 : bizIds.indexOf(instId));
         if (tab == TabletService.TAB_RATES) {
             for (int i = 0; i < N_TERMS; i++) if (termTexts[i] == null) termTexts[i] = fmtInput(termRates[i]);
             if (thresholdText.isEmpty()) thresholdText = String.valueOf(threshold / 100);
@@ -119,7 +138,7 @@ public class TabletScreen extends Screen {
     /** Ce qui change la structure de l'écran (boutons actifs, champs) et non juste les textes. */
     private String sig() {
         Row s = selectedRow();
-        return tab + "|" + selected + "|" + (s == null ? "" : s.status() + "" + s.frozen() + s.done()) + "|" + filterName + "|" + openAlerts + "|" + openContacts + "|" + granting;
+        return tab + "|" + selected + "|" + (s == null ? "" : s.status() + "" + s.frozen() + s.done()) + "|" + filterName + "|" + openAlerts + "|" + openContacts + "|" + granting + "|" + instId;
     }
 
     public void update(CompoundTag data) {
@@ -428,11 +447,12 @@ public class TabletScreen extends Screen {
                     termBoxes[i] = b;
                     addRenderableWidget(b);
                 }
-                thresholdBox = new EditBox(font, left + 250, top + 74, 80, 16, Component.literal("Seuil"));
+                thresholdBox = new EditBox(font, left + 200, top + 68, 90, 16, Component.literal("Seuil"));
                 thresholdBox.setMaxLength(10);
                 thresholdBox.setValue(thresholdText);
                 addRenderableWidget(thresholdBox);
                 addRenderableWidget(new AtmButton(left + 10, by, 150, 18, Component.literal("Enregistrer"), CYAN, this::saveRates));
+                initLink();
             }
         }
     }
@@ -502,6 +522,40 @@ public class TabletScreen extends Screen {
         super.render(g, mx, my, pt);
     }
 
+    /** Relier le capital de la banque au compte d'une entreprise (ex. « MineBanque ») : choix dans la liste puis « Relier ». */
+    private void initLink() {
+        boolean any = !bizIds.isEmpty();
+        addRenderableWidget(new AtmButton(left + 200, top + 126, 16, 16, Component.literal("<"), AtmButton.DARK,
+                () -> {
+                    bizIdx = (bizIdx + bizIds.size() - 1) % bizIds.size();
+                    saveTexts();
+                    rebuildWidgets();
+                }).enabled(any && bizIds.size() > 1));
+        addRenderableWidget(new AtmButton(left + 354, top + 126, 16, 16, Component.literal(">"), AtmButton.DARK,
+                () -> {
+                    bizIdx = (bizIdx + 1) % bizIds.size();
+                    saveTexts();
+                    rebuildWidgets();
+                }).enabled(any && bizIds.size() > 1));
+        addRenderableWidget(new AtmButton(left + 200, top + 148, 84, 18, Component.literal("Relier"), CYAN,
+                () -> send(TabletOp.LINK, bizIds.get(bizIdx), 0)).enabled(any && !bizIds.get(bizIdx).equals(instId)));
+        addRenderableWidget(new AtmButton(left + 288, top + 148, 82, 18, Component.literal("Délier"), AtmButton.PINK,
+                () -> send(TabletOp.UNLINK, null, 0)).enabled(instId != null));
+    }
+
+    private void renderLink(GuiGraphics g) {
+        g.drawString(font, "Entreprise de la banque", left + 200, top + 98, CYAN, false);
+        g.drawString(font, font.plainSubstrByWidth(instId != null ? "Liée : " + instName : "Aucune : capital interne", 172),
+                left + 200, top + 110, instId != null ? 0xFF5DE08A : WARN, false);
+        if (bizIds.isEmpty()) {
+            g.drawString(font, "Aucune entreprise disponible.", left + 220, top + 130, ALERT, false);
+        } else {
+            g.fill(left + 218, top + 126, left + 352, top + 142, 0xFF0E0A34);
+            String n = bizNames.get(bizIdx);
+            g.drawString(font, font.plainSubstrByWidth(n, 130), left + 222, top + 130, 0xFFFFFFFF, false);
+        }
+    }
+
     private void renderRates(GuiGraphics g) {
         g.drawString(font, "Taux par durée (annoncé aux clients)", left + 10, top + 58, CYAN, false);
         for (int i = 0; i < N_TERMS; i++) {
@@ -513,10 +567,8 @@ public class TabletScreen extends Screen {
             if (parseRateBp(v) < 0) g.drawString(font, "invalide", left + 156, y + 4, ALERT, false);
         }
         g.drawString(font, "Alerte automatique au-delà de (€)", left + 200, top + 58, CYAN, false);
-        g.drawString(font, "Actuel : " + Money.format(threshold), left + 250, top + 94, TEXT, false);
-        g.drawString(font, "Alertes : gros mouvements, rafales", left + 200, top + 118, TEXT, false);
-        g.drawString(font, "d'opérations, entrées suspectes", left + 200, top + 128, TEXT, false);
-        g.drawString(font, "après un braquage.", left + 200, top + 138, TEXT, false);
+        g.drawString(font, "Actuel : " + Money.format(threshold), left + 296, top + 72, TEXT, false);
+        renderLink(g);
     }
 
     private void renderList(GuiGraphics g, int mx, int my) {
