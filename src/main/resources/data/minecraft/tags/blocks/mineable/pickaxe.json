@@ -1,7 +1,10 @@
 {
-  "replace": false,
-  "values": [
-    "minenorth_eurobank:atm",
-    "minenorth_eurobank:atm_base"
-  ]
+    "replace":  false,
+    "values":  [
+                   "minenorth_eurobank:atm",
+                   "minenorth_eurobank:atm_base",
+                   "minenorth_eurobank:safe_basic",
+                   "minenorth_eurobank:safe_advanced",
+                   "minenorth_eurobank:safe_expert"
+               ]
 }

@@ -29,6 +29,48 @@ class BankerFeaturesTest {
     }
 
     @Test
+    void routineBankMovementsAndRepeatsDoNotSpamAlerts() {
+        BankData d = new BankData();
+        UUID p = UUID.randomUUID();
+        d.open(p);
+        long big = d.alertThreshold() * 2;
+        // prêt accordé, ajustement admin : jamais d'alerte
+        d.record(p, new BankTx(System.currentTimeMillis(), BankTx.INCOME, big, big, "Prêt accordé", null));
+        d.record(p, new BankTx(System.currentTimeMillis(), BankTx.ADMIN, big, big, "Ajout", null));
+        assertEquals(0, d.openAlerts());
+        // gros mouvements répétés : une seule alerte dans la fenêtre de 15 minutes
+        for (int i = 0; i < 5; i++) d.record(p, tx(big, big));
+        assertEquals(1, d.openAlerts());
+    }
+
+    @Test
+    void safeTiersMatchTheShopPrices() {
+        assertEquals(10, com.minenorth_eurobank.safe.SafeTier.BASIC.slots);
+        assertEquals(23, com.minenorth_eurobank.safe.SafeTier.ADVANCED.slots);
+        assertEquals(30, com.minenorth_eurobank.safe.SafeTier.EXPERT.slots);
+        assertEquals(4_000_00L, com.minenorth_eurobank.safe.SafeTier.BASIC.price);
+        assertEquals(11_000_00L, com.minenorth_eurobank.safe.SafeTier.ADVANCED.price);
+        assertEquals(25_000_00L, com.minenorth_eurobank.safe.SafeTier.EXPERT.price);
+        for (com.minenorth_eurobank.safe.SafeTier t : com.minenorth_eurobank.safe.SafeTier.values()) {
+            assertTrue(t.rows() * t.cols >= t.slots, "la grille doit contenir tous les emplacements");
+        }
+        assertEquals(25_000_00L, LoanService.MAX, "plafond des prêts");
+    }
+
+    @Test
+    void contactsCanBeDeleted() {
+        BankData d = new BankData();
+        UUID a = UUID.randomUUID(), b = UUID.randomUUID();
+        d.addContact(a, "A", "A", "1111", "x");
+        d.addContact(b, "B", "B", "2222", "y");
+        d.handleContact(d.contacts().get(0).id);
+        d.clearHandledContacts();
+        assertEquals(1, d.contacts().size());
+        d.deleteContact(d.contacts().get(0).id);
+        assertTrue(d.contacts().isEmpty());
+    }
+
+    @Test
     void depositAfterHeistIsSuspect() {
         BankData d = new BankData();
         UUID p = UUID.randomUUID();

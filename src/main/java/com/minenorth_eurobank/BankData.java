@@ -49,7 +49,7 @@ public class BankData extends SavedData {
     private final Map<UUID, String> notes = new HashMap<>();
     private final List<Alert> alerts = new ArrayList<>();
     /** Seuil (centimes) au-delà duquel un mouvement déclenche une alerte. */
-    private long alertThreshold = 5_000_00L;
+    private long alertThreshold = 10_000_00L;
     /** Dernier braquage de coffre (ms), 0 = aucun : les gros dépôts qui suivent sont suspects. */
     private long lastHeistMs;
 
@@ -421,21 +421,44 @@ public class BankData extends SavedData {
 
     /** Alertes automatiques : gros mouvement, rafale d'opérations, gros dépôt juste après un braquage. */
     private void detect(UUID account, BankTx tx, TxLog log) {
+        // Mouvements normaux de la banque elle-même : jamais d'alerte (capital, prêts, salaires, ajustements admin)
+        if (account.equals(institution) || BankTx.ADMIN.equals(tx.category()) || BankTx.SALARY.equals(tx.category())
+                || isLoanLabel(tx.label())) {
+            return;
+        }
         long abs = Math.abs(tx.cents());
         String who = displayAccount(account);
         if (abs >= alertThreshold) {
-            addAlert(account, "Gros mouvement de " + Money.format(tx.cents()) + " sur " + who, tx.cents());
+            raise(account, "gros", "Gros mouvement de " + Money.format(tx.cents()) + " sur " + who, tx.cents());
         }
         long now = tx.time();
-        if (tx.cents() > 0 && lastHeistMs > 0 && now - lastHeistMs <= HEIST_WINDOW_MS && abs >= HEIST_SUSPECT
-                && !BankTx.ADMIN.equals(tx.category())) {
-            addAlert(account, "Entrée suspecte après un braquage : " + Money.format(tx.cents()) + " sur " + who, tx.cents());
+        if (tx.cents() > 0 && lastHeistMs > 0 && now - lastHeistMs <= HEIST_WINDOW_MS && abs >= HEIST_SUSPECT) {
+            raise(account, "braquage", "Entrée suspecte après un braquage : " + Money.format(tx.cents()) + " sur " + who, tx.cents());
         }
-        int recent = 0;
-        for (BankTx x : log.latest(12)) if (now - x.time() <= 10 * 60_000L) recent++;
-        if (recent == 10) {
-            addAlert(account, "10 opérations en moins de 10 minutes sur " + who, tx.cents());
+        if (!business.contains(account)) {
+            int recent = 0;
+            for (BankTx x : log.latest(20)) if (now - x.time() <= 10 * 60_000L) recent++;
+            if (recent >= 15) {
+                raise(account, "rafale", "15 opérations en moins de 10 minutes sur " + who, tx.cents());
+            }
         }
+    }
+
+    private static boolean isLoanLabel(String label) {
+        if (label == null) return false;
+        return label.startsWith("Prêt") || label.contains("de prêt") || label.startsWith("Capital de la banque");
+    }
+
+    /** Une même alerte (compte + type) n'est répétée qu'après 15 minutes : évite d'inonder le banquier. */
+    private final transient Map<String, Long> alertCooldown = new HashMap<>();
+
+    private void raise(UUID account, String kind, String text, long cents) {
+        String key = account + kind;
+        long now = System.currentTimeMillis();
+        Long last = alertCooldown.get(key);
+        if (last != null && now - last < 15 * 60_000L) return;
+        alertCooldown.put(key, now);
+        addAlert(account, text, cents);
     }
 
     private String displayAccount(UUID id) {
@@ -551,6 +574,18 @@ public class BankData extends SavedData {
     public Contact contact(UUID id) {
         for (Contact c : contacts) if (c.id.equals(id)) return c;
         return null;
+    }
+
+    public void deleteContact(UUID id) {
+        if (contacts.removeIf(c -> c.id.equals(id))) setDirty();
+    }
+
+    public void clearHandledContacts() {
+        if (contacts.removeIf(c -> c.handled)) setDirty();
+    }
+
+    public void clearHandledAlerts() {
+        if (alerts.removeIf(a -> a.handled)) setDirty();
     }
 
     public boolean hasOpenContact(UUID player) {

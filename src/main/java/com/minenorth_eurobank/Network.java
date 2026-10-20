@@ -18,7 +18,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class Network {
-    private static final String PROTOCOL = "10";   // 10 : offres de prêt, remboursement anticipé, relevé (StatePacket, ActionPacket) ; 9 : menu du guichet
+    private static final String PROTOCOL = "11";   // 11 : guichet complet, relevé graphique, coffres-forts ; 10 : offres de prêt
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(EuroBank.MODID, "main"), () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
 
@@ -41,6 +41,7 @@ public final class Network {
         CHANNEL.registerMessage(id++, DeskPacket.class, DeskPacket::encode, DeskPacket::decode, DeskPacket::handle);
         CHANNEL.registerMessage(id++, DeskSubmitPacket.class, DeskSubmitPacket::encode, DeskSubmitPacket::decode, DeskSubmitPacket::handle);
         CHANNEL.registerMessage(id++, DeskMenuPacket.class, DeskMenuPacket::encode, DeskMenuPacket::decode, DeskMenuPacket::handle);
+        CHANNEL.registerMessage(id++, StatementPacket.class, StatementPacket::encode, StatementPacket::decode, StatementPacket::handle);
     }
 
     public static void openAtm(ServerPlayer p, BlockPos pos) {

@@ -83,6 +83,15 @@ public final class TabletService {
             case HANDLE_CONTACT:
                 d.handleContact(id);
                 return "";
+            case DELETE_CONTACT:
+                d.deleteContact(id);
+                return "Demande de contact supprimée.";
+            case CLEAR_CONTACTS:
+                d.clearHandledContacts();
+                return "Demandes traitées supprimées.";
+            case CLEAR_ALERTS:
+                d.clearHandledAlerts();
+                return "Alertes traitées supprimées.";
             case REMIND:
                 return LoanService.remind(s, id, num);
             case WAIVE:
@@ -98,8 +107,8 @@ public final class TabletService {
             }
             case STATEMENT: {
                 if (!d.has(id)) return "Compte introuvable.";
-                Money.giveStack(p, Statement.book(d, id));
-                return "Relevé de " + d.name(id) + " ajouté à votre inventaire.";
+                StatementService.send(p, id);
+                return "";
             }
             case SET_THRESHOLD:
                 if (num < 100_00L || num > 100_000_000_00L) return "Seuil invalide (100 € à 100 000 000 €).";

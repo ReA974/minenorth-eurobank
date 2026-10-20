@@ -17,7 +17,7 @@ import java.util.UUID;
 /** Règles et opérations sur les prêts. Tout est exécuté côté serveur. */
 public final class LoanService {
     public static final long MIN = 100_00L;
-    public static final long MAX = 50_000_00L;
+    public static final long MAX = 25_000_00L;
     public static final int MAX_RATE_BP = 10_000;      // 100 %
     public static final int[] TERMS = {1, 3, 7, 14, 30};
     public static final String[] TYPES = {"Personnel", "Immobilier", "Véhicule", "Entreprise", "Autre"};
@@ -375,27 +375,28 @@ public final class LoanService {
         com.minenorth_eurobank.banker.WeeklyReport.tick(s);
         for (Loan l : new ArrayList<>(d.loans())) {
             if ((l.status != Loan.ACTIVE && l.status != Loan.OVERDUE) || now < l.dueMs) continue;
-            long pay = d.has(l.borrower) ? Math.min(d.balance(l.borrower), l.remaining()) : 0;
-            if (pay > 0) {
-                d.add(l.borrower, -pay);
-                d.addReserve(pay);
-                d.log(l.borrower, BankTx.PAYMENT, -pay, "Prélèvement de prêt", null);
-                collected(d, l, pay);
-                l.repaid += pay;
-                d.setDirty();
-                tell(s, l.borrower, "Prélèvement de " + Money.format(pay) + " sur votre compte pour votre prêt.");
-            }
-            if (l.remaining() == 0) {
+            // prélèvement automatique du montant complet ; sans fonds suffisants, c'est un retard de paiement
+            long due = l.remaining();
+            if (due <= 0) {
                 l.status = Loan.REPAID;
                 d.setDirty();
-                tell(s, l.borrower, "Votre prêt est intégralement remboursé.");
+            } else if (d.has(l.borrower) && d.balance(l.borrower) >= due) {
+                d.add(l.borrower, -due);
+                d.addReserve(due);
+                d.log(l.borrower, BankTx.PAYMENT, -due, "Prélèvement de prêt", null);
+                collected(d, l, due);
+                l.repaid += due;
+                l.status = Loan.REPAID;
+                d.setDirty();
+                tell(s, l.borrower, "Votre prêt a été remboursé automatiquement : " + Money.format(due) + " prélevés sur votre compte.");
             } else if (l.status == Loan.ACTIVE) {
                 l.status = Loan.OVERDUE;
                 l.wasLate = true;
                 d.addStat("overdueN", 1);
                 d.setDirty();
-                tell(s, l.borrower, "Votre prêt est en retard. Reste à payer : " + Money.format(l.remaining()) + ".");
-                tellBankers(s, d.name(l.borrower) + " est en retard sur son prêt (reste " + Money.format(l.remaining()) + ").");
+                tell(s, l.borrower, "§cRetard de paiement : le prélèvement de " + Money.format(due) + " a échoué (solde insuffisant). Approvisionnez votre compte.");
+                d.addAlert(l.borrower, "Retard de paiement : " + d.name(l.borrower) + " n'a pas pu rembourser " + Money.format(due)
+                        + " (solde " + Money.format(d.has(l.borrower) ? d.balance(l.borrower) : 0) + ")", due);
             }
         }
     }

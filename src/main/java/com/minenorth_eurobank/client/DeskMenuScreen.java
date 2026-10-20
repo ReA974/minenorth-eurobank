@@ -37,14 +37,14 @@ public class DeskMenuScreen extends Screen {
         left = (width - W) / 2;
         top = (height - H) / 2;
         addRenderableWidget(new AtmButton(left + W - 80, top + 10, 66, 14, Component.literal("Fermer"), AtmButton.GHOST, this::onClose));
-        addRenderableWidget(new AtmButton(left + 20, top + 44, W - 40, 22, Component.literal("Demande de prêt"), AtmButton.CYAN,
+        addRenderableWidget(new AtmButton(left + 20, top + 44, W - 40, 22, Component.literal("Prêt : demande, remboursement"), AtmButton.CYAN,
                 () -> Network.CHANNEL.sendToServer(DeskMenuPacket.loan())));
         addRenderableWidget(new AtmButton(left + 20, top + 70, W - 40, 22, Component.literal("Contacter mon banquier"), AtmButton.CYAN,
                 () -> minecraft.setScreen(new ContactScreen(this))));
         addRenderableWidget(new AtmButton(left + 20, top + 96, W - 40, 22, Component.literal("Acheter un coffre de banque (bientôt)"),
                 AtmButton.DARK, () -> { }).enabled(false));
-        addRenderableWidget(new AtmButton(left + 20, top + 122, W - 40, 22, Component.literal("Acheter un coffre-fort (bientôt)"),
-                AtmButton.DARK, () -> { }).enabled(false));
+        addRenderableWidget(new AtmButton(left + 20, top + 122, W - 40, 22, Component.literal("Acheter un coffre-fort"),
+                AtmButton.CYAN, () -> minecraft.setScreen(new SafeShopScreen(this))));
     }
 
     @Override

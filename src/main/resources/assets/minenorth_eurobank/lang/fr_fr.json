@@ -1,5 +1,8 @@
 {
   "itemGroup.minenorth_eurobank": "MineNorthRP - Banque",
+    "block.minenorth_eurobank.safe_basic": "Coffre-fort Basique",
+  "block.minenorth_eurobank.safe_advanced": "Coffre-fort Avancé",
+  "block.minenorth_eurobank.safe_expert": "Coffre-fort Expert",
   "block.minenorth_eurobank.atm": "Distributeur MineNorth Bank",
   "item.minenorth_eurobank.bank_card": "Carte bancaire",
   "item.minenorth_eurobank.banker_tablet": "Tablette banquier",

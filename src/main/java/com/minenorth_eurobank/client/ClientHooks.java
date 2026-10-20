@@ -23,11 +23,17 @@ public final class ClientHooks {
         else if (m.open) mc.setScreen(new TabletScreen(m.data));
     }
 
+    public static void handleStatement(com.minenorth_eurobank.packet.StatementPacket m) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.setScreen(new StatementScreen(m.data, mc.screen instanceof StatementScreen s ? s.parentScreen() : mc.screen));
+    }
+
     public static void handleDesk(DeskPacket m) {
         Minecraft mc = Minecraft.getInstance();
         if (m.state == DeskPacket.MENU) {
             if (m.open) mc.setScreen(new DeskMenuScreen());
             else if (mc.screen instanceof ContactScreen s) s.update(m.message);
+            else if (mc.screen instanceof SafeShopScreen s) s.update(m.message);
             else if (mc.screen instanceof DeskMenuScreen s) s.update(m.message);
             return;
         }

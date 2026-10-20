@@ -4,6 +4,7 @@ import com.minenorth_eurobank.EuroBank;
 import com.minenorth_eurobank.Money;
 import com.minenorth_eurobank.Network;
 import com.minenorth_eurobank.loan.LoanService;
+import com.minenorth_eurobank.packet.DeskMenuPacket;
 import com.minenorth_eurobank.packet.DeskPacket;
 import com.minenorth_eurobank.packet.DeskSubmitPacket;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -40,7 +41,7 @@ public class LoanDeskScreen extends Screen {
     }
 
     public void update(DeskPacket n) {
-        boolean rebuild = n.state != st.state;
+        boolean rebuild = n.state != st.state || n.payoff != st.payoff || n.total != st.total || n.repaid != st.repaid;
         this.st = n;
         if (!n.message.isEmpty()) this.message = n.message;
         if (rebuild) rebuildWidgets();
@@ -90,7 +91,28 @@ public class LoanDeskScreen extends Screen {
         top = (height - H) / 2;
         amountBox = downBox = phoneBox = reasonBox = null;
         addRenderableWidget(new AtmButton(left + W - 112, top + 10, 98, 16, Component.literal("Fermer"), AtmButton.GHOST, this::onClose));
-        if (st.state == DeskPacket.NO_ACCOUNT || st.state == DeskPacket.RUNNING) return;
+        if (st.state == DeskPacket.NO_ACCOUNT) return;
+        if (st.state == DeskPacket.OFFER) {
+            addRenderableWidget(new AtmButton(left + 16, top + 120, 140, 22, Component.literal("Accepter l'offre"), CYAN,
+                    () -> Network.CHANNEL.sendToServer(DeskMenuPacket.of(DeskMenuPacket.Action.OFFER_ACCEPT))));
+            addRenderableWidget(new AtmButton(left + 164, top + 120, 140, 22, Component.literal("Refuser"), AtmButton.PINK,
+                    () -> Network.CHANNEL.sendToServer(DeskMenuPacket.of(DeskMenuPacket.Action.OFFER_DECLINE))));
+            return;
+        }
+        if (st.state == DeskPacket.RUNNING) {
+            amountBox = box(16, 124, 100, "Montant en €", 9);
+            amountBox.setValue(amountText);
+            addRenderableWidget(amountBox);
+            addRenderableWidget(new AtmButton(left + 120, top + 123, 60, 18, Component.literal("Payer"), CYAN, () -> {
+                saveTexts();
+                long cents = Money.parseEuros(amountText);
+                if (cents <= 0) message = "Indiquez un montant.";
+                else Network.CHANNEL.sendToServer(DeskMenuPacket.repay(cents));
+            }));
+            addRenderableWidget(new AtmButton(left + 16, top + 148, 288, 20, Component.literal("Tout rembourser (" + Money.format(st.payoff) + ")"),
+                    CYAN, () -> Network.CHANNEL.sendToServer(DeskMenuPacket.of(DeskMenuPacket.Action.REPAY_ALL))));
+            return;
+        }
         if (st.state == DeskPacket.PENDING) {
             addRenderableWidget(new AtmButton(left + 16, top + 140, 150, 20, Component.literal("Annuler ma demande"), AtmButton.DARK,
                     () -> Network.CHANNEL.sendToServer(DeskSubmitPacket.cancel())));
@@ -173,8 +195,29 @@ public class LoanDeskScreen extends Screen {
                 g.drawString(font, "Ouvrez-en un à un distributeur (ATM).", left + 16, top + 74, TEXT, false);
             }
             case DeskPacket.RUNNING -> {
-                g.drawString(font, "Vous avez déjà un prêt en cours.", left + 16, top + 60, TEXT, false);
-                g.drawString(font, "Remboursez-le avant d'en demander un autre.", left + 16, top + 74, TEXT, false);
+                long left0 = Math.max(0, st.total - st.repaid);
+                g.drawString(font, st.late ? "PRÊT EN RETARD DE PAIEMENT" : "Votre prêt en cours", left + 16, top + 40,
+                        st.late ? 0xFFFF6A9A : CYAN, false);
+                g.drawString(font, "Capital " + Money.format(st.principal) + "  |  taux " + LoanService.rateLabel(st.rateBp)
+                        + "  |  " + st.termDays + " j", left + 16, top + 56, TEXT, false);
+                g.drawString(font, "Total dû " + Money.format(st.total) + "  |  déjà remboursé " + Money.format(st.repaid),
+                        left + 16, top + 68, TEXT, false);
+                g.drawString(font, "Reste à payer : " + Money.format(left0), left + 16, top + 84, 0xFFFFFFFF, false);
+                g.drawString(font, "Échéance : " + LoanService.date(st.dueMs) + "  (prélèvement automatique)", left + 16, top + 98,
+                        st.late ? 0xFFFF6A9A : TEXT, false);
+                long saved = left0 - st.payoff;
+                g.drawString(font, saved > 0 ? "Tout payer aujourd'hui : " + Money.format(saved) + " d'intérêts en moins"
+                        : "Vous pouvez aussi rembourser en avance.", left + 16, top + 112, WARN, false);
+            }
+            case DeskPacket.OFFER -> {
+                g.drawString(font, "Offre de votre banquier", left + 16, top + 40, CYAN, false);
+                g.drawString(font, "Montant : " + Money.format(st.principal) + " sur " + st.termDays + " jours", left + 16, top + 58,
+                        0xFFFFFFFF, false);
+                long due = st.principal + LoanService.interest(st.principal, st.rateBp);
+                g.drawString(font, "Taux " + LoanService.rateLabel(st.rateBp) + "  -  à rembourser " + Money.format(due),
+                        left + 16, top + 72, TEXT, false);
+                g.drawString(font, "Valable jusqu'au " + LoanService.date(st.offerExpiryMs).substring(0, 10), left + 16, top + 90, WARN, false);
+                g.drawString(font, "Le remboursement sera prélevé automatiquement sur votre compte.", left + 16, top + 104, TEXT, false);
             }
             case DeskPacket.PENDING -> {
                 g.drawString(font, "Votre demande de " + Money.format(st.principal) + " est en cours d'étude.", left + 16, top + 60, WARN, false);

@@ -73,7 +73,7 @@ public class ContactScreen extends Screen {
         addRenderableWidget(requestBox);
         addRenderableWidget(new AtmButton(left + 16, top + 148, 150, 20, Component.literal("Envoyer"), CYAN, () -> {
             saveTexts();
-            Network.CHANNEL.sendToServer(new DeskMenuPacket(DeskMenuPacket.Action.CONTACT, firstName, lastName, phone, request));
+            Network.CHANNEL.sendToServer(DeskMenuPacket.contact(firstName, lastName, phone, request));
         }).enabled(!sent));
     }
 

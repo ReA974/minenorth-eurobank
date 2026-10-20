@@ -309,7 +309,7 @@ public class TabletScreen extends Screen {
             addRenderableWidget(new AtmButton(x, top + 34, widths[i] - 3, 16, Component.literal(label),
                     i == tab ? CYAN : AtmButton.DARK, () -> {
                         granting = false;
-                        view(idx, null, null);
+                        view(idx, idx == TabletService.TAB_REPORT ? new UUID(0L, 1L) : null, null);
                     }));
             x += widths[i];
         }
@@ -387,14 +387,18 @@ public class TabletScreen extends Screen {
                             saveTexts();
                             Network.CHANNEL.sendToServer(TabletPacket.text(TabletOp.NOTE, selected, noteText));
                         }).enabled(sel != null));
-                addRenderableWidget(new AtmButton(left + 10, by2, 110, 18, Component.literal("Relevé (livre)"), AtmButton.DARK,
+                addRenderableWidget(new AtmButton(left + 10, by2, 110, 18, Component.literal("Relevé"), AtmButton.DARK,
                         () -> send(TabletOp.STATEMENT, selected, 0)).enabled(sel != null));
             }
             case TabletService.TAB_CONTACTS -> {
                 addRenderableWidget(new AtmButton(left + 10, by, 70, 18, Component.literal("Traité"), CYAN,
                         () -> send(TabletOp.HANDLE_CONTACT, selected, 0)).enabled(sel != null && !sel.done()));
-                addRenderableWidget(new AtmButton(left + 84, by, 110, 18, Component.literal("Voir le compte"), AtmButton.DARK,
+                addRenderableWidget(new AtmButton(left + 74, by, 90, 18, Component.literal("Voir le compte"), AtmButton.DARK,
                         () -> view(TabletService.TAB_ACCOUNTS, sel.account(), null)).enabled(sel != null));
+                addRenderableWidget(new AtmButton(left + 168, by, 70, 18, Component.literal("Supprimer"), AtmButton.PINK,
+                        () -> send(TabletOp.DELETE_CONTACT, selected, 0)).enabled(sel != null));
+                addRenderableWidget(new AtmButton(left + 242, by, 100, 18, Component.literal("Vider traités"), AtmButton.DARK,
+                        () -> send(TabletOp.CLEAR_CONTACTS, null, 0)));
                 remindButtons(by2, 10, sel != null && !sel.done());
             }
             case TabletService.TAB_TX -> {
@@ -412,7 +416,10 @@ public class TabletScreen extends Screen {
                         () -> send(TabletOp.HANDLE_ALL, null, 0)));
                 addRenderableWidget(new AtmButton(left + 178, by, 100, 18, Component.literal("Voir le compte"), AtmButton.DARK,
                         () -> view(TabletService.TAB_ACCOUNTS, sel.account(), null)).enabled(sel != null));
+                addRenderableWidget(new AtmButton(left + 282, by, 84, 18, Component.literal("Vider traitées"), AtmButton.DARK,
+                        () -> send(TabletOp.CLEAR_ALERTS, null, 0)));
             }
+            case TabletService.TAB_REPORT -> { }
             default -> {
                 for (int i = 0; i < N_TERMS; i++) {
                     EditBox b = new EditBox(font, left + 84, top + 74 + i * 18, 56, 16, Component.literal("Taux"));

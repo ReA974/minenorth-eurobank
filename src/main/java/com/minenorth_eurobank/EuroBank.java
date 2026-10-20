@@ -34,6 +34,10 @@ public class EuroBank {
         IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
         ModBlocks.BLOCKS.register(bus);
         ModItems.ITEMS.register(bus);
+        com.minenorth_eurobank.safe.ModSafe.BLOCKS.register(bus);
+        com.minenorth_eurobank.safe.ModSafe.ITEMS.register(bus);
+        com.minenorth_eurobank.safe.ModSafe.BLOCK_ENTITIES.register(bus);
+        com.minenorth_eurobank.safe.ModSafe.MENUS.register(bus);
         // Braquage de banque (ex-mod minenorthbanque_braque)
         com.minenorth_eurobank.braquage.block.ModBlocks.BLOCKS.register(bus);
         com.minenorth_eurobank.braquage.block.entity.ModBlockEntities.BLOCK_ENTITIES.register(bus);
@@ -94,6 +98,16 @@ public class EuroBank {
                 if (alerts > 0) {
                     sp.sendSystemMessage(Component.literal("§c[Banque] " + alerts + " alerte(s) à traiter sur la tablette."));
                 }
+            }
+            Loan mine = d.openLoanOf(sp.getUUID());
+            if (mine != null && mine.status == Loan.OVERDUE) {
+                sp.sendSystemMessage(Component.literal("§c[Banque] Votre prêt est en retard de paiement : "
+                        + Money.format(mine.remaining()) + " à régler. Approvisionnez votre compte."));
+            }
+            Loan offer = LoanService.offerOf(d, sp.getUUID());
+            if (offer != null) {
+                sp.sendSystemMessage(Component.literal("§6[Banque] Votre banquier vous a fait une offre de prêt de "
+                        + Money.format(offer.principal) + ". Rendez-vous au guichet pour répondre."));
             }
         }
     }

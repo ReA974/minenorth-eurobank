@@ -1,0 +1,19 @@
+{
+    "variants":  {
+                     "facing=north":  {
+                                          "model":  "minenorth_eurobank:block/safe_expert"
+                                      },
+                     "facing=east":  {
+                                         "model":  "minenorth_eurobank:block/safe_expert",
+                                         "y":  90
+                                     },
+                     "facing=south":  {
+                                          "model":  "minenorth_eurobank:block/safe_expert",
+                                          "y":  180
+                                      },
+                     "facing=west":  {
+                                         "model":  "minenorth_eurobank:block/safe_expert",
+                                         "y":  270
+                                     }
+                 }
+}
