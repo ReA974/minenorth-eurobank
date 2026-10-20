@@ -164,6 +164,7 @@ public class BankVaultBlockEntity extends RandomizableContainerBlockEntity imple
             return;
         }
         generateLootIfNeeded();
+        if (level.getServer() != null) com.minenorth_eurobank.BankData.get(level.getServer()).markHeist();
         level.setBlock(worldPosition, getBlockState().setValue(BankVaultBlock.OPEN, true).setValue(BankVaultBlock.BLOCKED, false), 3);
         setChanged();
     }

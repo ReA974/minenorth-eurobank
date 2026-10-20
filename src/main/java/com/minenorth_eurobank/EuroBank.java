@@ -34,6 +34,10 @@ public class EuroBank {
         IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
         ModBlocks.BLOCKS.register(bus);
         ModItems.ITEMS.register(bus);
+        com.minenorth_eurobank.safe.ModSafe.BLOCKS.register(bus);
+        com.minenorth_eurobank.safe.ModSafe.ITEMS.register(bus);
+        com.minenorth_eurobank.safe.ModSafe.BLOCK_ENTITIES.register(bus);
+        com.minenorth_eurobank.safe.ModSafe.MENUS.register(bus);
         // Braquage de banque (ex-mod minenorthbanque_braque)
         com.minenorth_eurobank.braquage.block.ModBlocks.BLOCKS.register(bus);
         com.minenorth_eurobank.braquage.block.entity.ModBlockEntities.BLOCK_ENTITIES.register(bus);
@@ -84,8 +88,26 @@ public class EuroBank {
                 long pending = d.loans().stream().filter(l -> l.status == Loan.PENDING).count();
                 if (pending > 0) {
                     sp.sendSystemMessage(Component.literal("[Banque] " + pending
-                            + " demande(s) de prêt en attente. Ouvrez un ATM ou tapez /bank banquier."));
+                            + " demande(s) de prêt en attente. Ouvrez votre tablette ou tapez /bank banquier."));
                 }
+                long contacts = d.openContacts();
+                if (contacts > 0) {
+                    sp.sendSystemMessage(Component.literal("[Banque] " + contacts + " client(s) souhaitent que vous les rappeliez."));
+                }
+                long alerts = d.openAlerts();
+                if (alerts > 0) {
+                    sp.sendSystemMessage(Component.literal("§c[Banque] " + alerts + " alerte(s) à traiter sur la tablette."));
+                }
+            }
+            Loan mine = d.openLoanOf(sp.getUUID());
+            if (mine != null && mine.status == Loan.OVERDUE) {
+                sp.sendSystemMessage(Component.literal("§c[Banque] Votre prêt est en retard de paiement : "
+                        + Money.format(mine.remaining()) + " à régler. Approvisionnez votre compte."));
+            }
+            Loan offer = LoanService.offerOf(d, sp.getUUID());
+            if (offer != null) {
+                sp.sendSystemMessage(Component.literal("§6[Banque] Votre banquier vous a fait une offre de prêt de "
+                        + Money.format(offer.principal) + ". Rendez-vous au guichet pour répondre."));
             }
         }
     }

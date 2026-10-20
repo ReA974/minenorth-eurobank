@@ -43,6 +43,39 @@ public class BankData extends SavedData {
     /** Taux (points de base) appliqué sur la durée du prêt, par durée, dans l'ordre de LoanService.TERMS : 1, 3, 7, 14, 30 jours. */
     private final int[] termRates = {100, 250, 500, 800, 1200};
     private boolean refreshPending;
+    /** Comptes gelés (joueurs ou entreprises) : plus aucune sortie d'argent. */
+    private final Set<UUID> frozen = new HashSet<>();
+    /** Notes privées du banquier, par compte. */
+    private final Map<UUID, String> notes = new HashMap<>();
+    private final List<Alert> alerts = new ArrayList<>();
+    /** Seuil (centimes) au-delà duquel un mouvement déclenche une alerte. */
+    private long alertThreshold = 10_000_00L;
+    /** Dernier braquage de coffre (ms), 0 = aucun : les gros dépôts qui suivent sont suspects. */
+    private long lastHeistMs;
+
+    public static final int MAX_ALERTS = 100;
+    public static final long HEIST_WINDOW_MS = 60L * 60_000L;
+    /** Dépôt/virement entrant jugé suspect après un braquage. */
+    public static final long HEIST_SUSPECT = 500_00L;
+
+    /** Alerte automatique pour le banquier. */
+    public static final class Alert {
+        public final UUID id;
+        public final long time;
+        public final UUID account;
+        public final String text;
+        public final long cents;
+        public boolean handled;
+
+        public Alert(UUID id, long time, UUID account, String text, long cents, boolean handled) {
+            this.id = id;
+            this.time = time;
+            this.account = account;
+            this.text = text;
+            this.cents = cents;
+            this.handled = handled;
+        }
+    }
 
     /** Serveur courant (non sauvegardé) : sert à lire l'identité RP pour les noms affichés. */
     private transient MinecraftServer server;
@@ -85,6 +118,36 @@ public class BankData extends SavedData {
                         x.getLong("after"), x.getString("label"), x.getString("actor")));
             }
             d.history.put(t.getUUID("id"), log);
+        }
+        ListTag fz = tag.getList("frozen", Tag.TAG_INT_ARRAY);
+        for (int i = 0; i < fz.size(); i++) d.frozen.add(NbtUtils.loadUUID(fz.get(i)));
+        ListTag nt = tag.getList("notes", Tag.TAG_COMPOUND);
+        for (int i = 0; i < nt.size(); i++) d.notes.put(nt.getCompound(i).getUUID("id"), nt.getCompound(i).getString("text"));
+        ListTag al = tag.getList("alerts", Tag.TAG_COMPOUND);
+        for (int i = 0; i < al.size(); i++) {
+            CompoundTag a = al.getCompound(i);
+            d.alerts.add(new Alert(a.getUUID("id"), a.getLong("time"), a.getUUID("account"), a.getString("text"),
+                    a.getLong("cents"), a.getBoolean("handled")));
+        }
+        ListTag ct = tag.getList("contacts", Tag.TAG_COMPOUND);
+        for (int i = 0; i < ct.size(); i++) {
+            CompoundTag c = ct.getCompound(i);
+            d.contacts.add(new Contact(c.getUUID("id"), c.getLong("time"), c.getUUID("player"), c.getString("first"),
+                    c.getString("last"), c.getString("phone"), c.getString("message"), c.getBoolean("handled")));
+            d.contacts.get(d.contacts.size() - 1).remindMs = c.getLong("remind");
+        }
+        if (tag.contains("threshold")) d.alertThreshold = tag.getLong("threshold");
+        d.lastHeistMs = tag.getLong("heist");
+        d.weekStartMs = tag.getLong("weekStart");
+        CompoundTag wk = tag.getCompound("week");
+        for (String k : wk.getAllKeys()) d.week.put(k, wk.getLong(k));
+        ListTag rp = tag.getList("reports", Tag.TAG_COMPOUND);
+        for (int i = 0; i < rp.size(); i++) {
+            CompoundTag r = rp.getCompound(i);
+            List<String> lines = new ArrayList<>();
+            ListTag ln = r.getList("lines", Tag.TAG_STRING);
+            for (int j = 0; j < ln.size(); j++) lines.add(ln.getString(j));
+            d.reports.add(new Report(r.getUUID("id"), r.getLong("start"), r.getLong("end"), lines));
         }
         d.reserve = tag.getLong("reserve");
         if (tag.hasUUID("institution")) d.institution = tag.getUUID("institution");
@@ -149,6 +212,62 @@ public class BankData extends SavedData {
             hs.add(t);
         });
         tag.put("history", hs);
+        ListTag fz = new ListTag();
+        for (UUID f : frozen) fz.add(NbtUtils.createUUID(f));
+        tag.put("frozen", fz);
+        ListTag nt = new ListTag();
+        notes.forEach((id, text) -> {
+            CompoundTag t = new CompoundTag();
+            t.putUUID("id", id);
+            t.putString("text", text);
+            nt.add(t);
+        });
+        tag.put("notes", nt);
+        ListTag al = new ListTag();
+        for (Alert a : alerts) {
+            CompoundTag t = new CompoundTag();
+            t.putUUID("id", a.id);
+            t.putLong("time", a.time);
+            t.putUUID("account", a.account);
+            t.putString("text", a.text);
+            t.putLong("cents", a.cents);
+            t.putBoolean("handled", a.handled);
+            al.add(t);
+        }
+        tag.put("alerts", al);
+        ListTag ct = new ListTag();
+        for (Contact c : contacts) {
+            CompoundTag t = new CompoundTag();
+            t.putUUID("id", c.id);
+            t.putLong("time", c.time);
+            t.putUUID("player", c.player);
+            t.putString("first", c.first);
+            t.putString("last", c.last);
+            t.putString("phone", c.phone);
+            t.putString("message", c.message);
+            t.putBoolean("handled", c.handled);
+            t.putLong("remind", c.remindMs);
+            ct.add(t);
+        }
+        tag.put("contacts", ct);
+        tag.putLong("threshold", alertThreshold);
+        tag.putLong("heist", lastHeistMs);
+        tag.putLong("weekStart", weekStartMs);
+        CompoundTag wk = new CompoundTag();
+        week.forEach(wk::putLong);
+        tag.put("week", wk);
+        ListTag rp = new ListTag();
+        for (Report r : reports) {
+            CompoundTag t = new CompoundTag();
+            t.putUUID("id", r.id);
+            t.putLong("start", r.startMs);
+            t.putLong("end", r.endMs);
+            ListTag ln = new ListTag();
+            for (String x : r.lines) ln.add(net.minecraft.nbt.StringTag.valueOf(x));
+            t.put("lines", ln);
+            rp.add(t);
+        }
+        tag.put("reports", rp);
         tag.putLong("reserve", reserve);
         if (institution != null) tag.putUUID("institution", institution);
         tag.putIntArray("rates", termRates);
@@ -290,6 +409,8 @@ public class BankData extends SavedData {
         names.remove(id);
         signers.remove(id);
         history.remove(id);
+        frozen.remove(id);
+        notes.remove(id);
         setDirty();
     }
 
@@ -303,8 +424,253 @@ public class BankData extends SavedData {
     }
 
     public void record(UUID account, BankTx tx) {
-        history.computeIfAbsent(account, k -> new TxLog()).add(tx);
+        TxLog log = history.computeIfAbsent(account, k -> new TxLog());
+        log.add(tx);
+        detect(account, tx, log);
         setDirty();
+    }
+
+    /** Enregistre une opération déjà appliquée au solde (le solde après opération est lu ici). */
+    public void log(UUID account, String category, long signedCents, String label, String actor) {
+        record(account, new BankTx(System.currentTimeMillis(), category, signedCents, balance(account), label, actor));
+    }
+
+    /** Alertes automatiques : gros mouvement, rafale d'opérations, gros dépôt juste après un braquage. */
+    private void detect(UUID account, BankTx tx, TxLog log) {
+        // Mouvements normaux de la banque elle-même : jamais d'alerte (capital, prêts, salaires, ajustements admin)
+        if (account.equals(institution) || BankTx.ADMIN.equals(tx.category()) || BankTx.SALARY.equals(tx.category())
+                || isLoanLabel(tx.label())) {
+            return;
+        }
+        long abs = Math.abs(tx.cents());
+        String who = displayAccount(account);
+        if (abs >= alertThreshold) {
+            raise(account, "gros", "Gros mouvement de " + Money.format(tx.cents()) + " sur " + who, tx.cents());
+        }
+        long now = tx.time();
+        if (tx.cents() > 0 && lastHeistMs > 0 && now - lastHeistMs <= HEIST_WINDOW_MS && abs >= HEIST_SUSPECT) {
+            raise(account, "braquage", "Entrée suspecte après un braquage : " + Money.format(tx.cents()) + " sur " + who, tx.cents());
+        }
+        if (!business.contains(account)) {
+            int recent = 0;
+            for (BankTx x : log.latest(20)) if (now - x.time() <= 10 * 60_000L) recent++;
+            if (recent >= 15) {
+                raise(account, "rafale", "15 opérations en moins de 10 minutes sur " + who, tx.cents());
+            }
+        }
+    }
+
+    private static boolean isLoanLabel(String label) {
+        if (label == null) return false;
+        return label.startsWith("Prêt") || label.contains("de prêt") || label.startsWith("Capital de la banque");
+    }
+
+    /** Une même alerte (compte + type) n'est répétée qu'après 15 minutes : évite d'inonder le banquier. */
+    private final transient Map<String, Long> alertCooldown = new HashMap<>();
+
+    private void raise(UUID account, String kind, String text, long cents) {
+        String key = account + kind;
+        long now = System.currentTimeMillis();
+        Long last = alertCooldown.get(key);
+        if (last != null && now - last < 15 * 60_000L) return;
+        alertCooldown.put(key, now);
+        addAlert(account, text, cents);
+    }
+
+    private String displayAccount(UUID id) {
+        return (business.contains(id) ? "l'entreprise " : "") + name(id);
+    }
+
+    public void addAlert(UUID account, String text, long cents) {
+        week.merge("alertsN", 1L, Long::sum);
+        alerts.add(new Alert(UUID.randomUUID(), System.currentTimeMillis(), account, text, cents, false));
+        while (alerts.size() > MAX_ALERTS) alerts.remove(0);
+        setDirty();
+        if (server != null) {
+            for (net.minecraft.server.level.ServerPlayer sp : server.getPlayerList().getPlayers()) {
+                if (bankers.contains(sp.getUUID())) {
+                    sp.sendSystemMessage(net.minecraft.network.chat.Component.literal("§c[Banque] Alerte : " + text));
+                }
+            }
+        }
+    }
+
+    // --- demandes de contact (« Contacter mon banquier » au guichet)
+    public static final int MAX_CONTACTS = 100;
+
+    /** Demande de rappel laissée par un joueur au guichet. */
+    public static final class Contact {
+        public final UUID id;
+        public final long time;
+        public final UUID player;
+        public final String first, last, phone, message;
+        public boolean handled;
+        /** Heure (ms) à laquelle rappeler ce client ; 0 = aucun rappel programmé. */
+        public long remindMs;
+
+        public Contact(UUID id, long time, UUID player, String first, String last, String phone, String message, boolean handled) {
+            this.id = id;
+            this.time = time;
+            this.player = player;
+            this.first = first;
+            this.last = last;
+            this.phone = phone;
+            this.message = message;
+            this.handled = handled;
+        }
+    }
+
+    private final List<Contact> contacts = new ArrayList<>();
+
+    // --- rapport hebdomadaire : compteurs de la semaine en cours et rapports passés
+    public static final int MAX_REPORTS = 12;
+
+    /** Rapport d'une semaine écoulée (lignes de texte déjà formatées). */
+    public static final class Report {
+        public final UUID id;
+        public final long startMs, endMs;
+        public final List<String> lines;
+
+        public Report(UUID id, long startMs, long endMs, List<String> lines) {
+            this.id = id;
+            this.startMs = startMs;
+            this.endMs = endMs;
+            this.lines = lines;
+        }
+    }
+
+    private final Map<String, Long> week = new HashMap<>();
+    private final List<Report> reports = new ArrayList<>();
+    private long weekStartMs;
+
+    public void addStat(String key, long delta) {
+        week.merge(key, delta, Long::sum);
+        setDirty();
+    }
+
+    public long stat(String key) { return week.getOrDefault(key, 0L); }
+
+    public long weekStartMs() { return weekStartMs; }
+
+    public void setWeekStart(long ms) {
+        weekStartMs = ms;
+        setDirty();
+    }
+
+    public List<Report> reports() { return Collections.unmodifiableList(reports); }
+
+    /** Archive le rapport de la semaine écoulée et remet les compteurs à zéro. */
+    public void closeWeek(long endMs, List<String> lines) {
+        reports.add(new Report(UUID.randomUUID(), weekStartMs, endMs, lines));
+        while (reports.size() > MAX_REPORTS) reports.remove(0);
+        week.clear();
+        weekStartMs = endMs;
+        setDirty();
+    }
+
+    public List<Contact> contacts() { return Collections.unmodifiableList(contacts); }
+
+    public long openContacts() { return contacts.stream().filter(c -> !c.handled).count(); }
+
+    public void addContact(UUID player, String first, String last, String phone, String message) {
+        contacts.add(new Contact(UUID.randomUUID(), System.currentTimeMillis(), player, first, last, phone, message, false));
+        week.merge("contactsN", 1L, Long::sum);
+        while (contacts.size() > MAX_CONTACTS) contacts.remove(0);
+        setDirty();
+        if (server != null) {
+            for (net.minecraft.server.level.ServerPlayer sp : server.getPlayerList().getPlayers()) {
+                if (bankers.contains(sp.getUUID())) {
+                    sp.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                            "§6[Banque] " + first + " " + last + " souhaite vous contacter (tél. " + phone + ")."));
+                }
+            }
+        }
+    }
+
+    public Contact contact(UUID id) {
+        for (Contact c : contacts) if (c.id.equals(id)) return c;
+        return null;
+    }
+
+    public void deleteContact(UUID id) {
+        if (contacts.removeIf(c -> c.id.equals(id))) setDirty();
+    }
+
+    public void clearHandledContacts() {
+        if (contacts.removeIf(c -> c.handled)) setDirty();
+    }
+
+    public void clearHandledAlerts() {
+        if (alerts.removeIf(a -> a.handled)) setDirty();
+    }
+
+    public boolean hasOpenContact(UUID player) {
+        for (Contact c : contacts) if (!c.handled && c.player.equals(player)) return true;
+        return false;
+    }
+
+    public void handleContact(UUID id) {
+        for (Contact c : contacts) if (c.id.equals(id) && !c.handled) { c.handled = true; setDirty(); }
+    }
+
+    public List<Alert> alerts() { return Collections.unmodifiableList(alerts); }
+
+    public long openAlerts() { return alerts.stream().filter(a -> !a.handled).count(); }
+
+    public void handleAlert(UUID id) {
+        for (Alert a : alerts) if (a.id.equals(id) && !a.handled) { a.handled = true; setDirty(); }
+    }
+
+    public void handleAllAlerts() {
+        for (Alert a : alerts) a.handled = true;
+        setDirty();
+    }
+
+    public long alertThreshold() { return alertThreshold; }
+
+    public void setAlertThreshold(long cents) {
+        alertThreshold = cents;
+        setDirty();
+    }
+
+    /** Appelé quand un coffre de banque est ouvert : les gros dépôts qui suivent seront signalés. */
+    public void markHeist() {
+        lastHeistMs = System.currentTimeMillis();
+        setDirty();
+    }
+
+    // --- gel et notes
+    public boolean isFrozen(UUID id) { return frozen.contains(id); }
+
+    public void setFrozen(UUID id, boolean on) {
+        if (on ? frozen.add(id) : frozen.remove(id)) setDirty();
+    }
+
+    public String note(UUID id) { return notes.getOrDefault(id, ""); }
+
+    public void setNote(UUID id, String text) {
+        if (text == null || text.isBlank()) notes.remove(id);
+        else notes.put(id, text);
+        setDirty();
+    }
+
+    /** Tous les comptes (joueurs et entreprises). */
+    public Set<UUID> accountIds() { return Collections.unmodifiableSet(balances.keySet()); }
+
+    public Set<UUID> businesses() { return Collections.unmodifiableSet(business); }
+
+    /** Une opération avec le compte concerné (flux global de la tablette banquier). */
+    public record AccountTx(UUID account, BankTx tx) {}
+
+    /** Dernières opérations de tous les comptes (ou d'un seul si {@code filter} n'est pas null), les plus récentes d'abord. */
+    public List<AccountTx> recent(UUID filter, int limit) {
+        List<AccountTx> all = new ArrayList<>();
+        for (Map.Entry<UUID, TxLog> e : history.entrySet()) {
+            if (filter != null && !filter.equals(e.getKey())) continue;
+            for (BankTx t : e.getValue().latest(limit)) all.add(new AccountTx(e.getKey(), t));
+        }
+        all.sort((a, b) -> Long.compare(b.tx().time(), a.tx().time()));
+        return all.size() > limit ? new ArrayList<>(all.subList(0, limit)) : all;
     }
 
     public List<BankTx> history(UUID account, int limit) {

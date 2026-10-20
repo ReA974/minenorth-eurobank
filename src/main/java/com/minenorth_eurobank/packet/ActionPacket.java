@@ -19,7 +19,7 @@ import java.util.function.Supplier;
 /** Client -> serveur : action demandée à l'ATM. Tout est revalidé côté serveur. */
 public class ActionPacket {
     public enum Action { OPEN_ACCOUNT, NEW_CARD, DEPOSIT_ALL, DEPOSIT, WITHDRAW, TRANSFER,
-        LOAN_REQUEST, LOAN_CANCEL, LOAN_REPAY, LOAN_REPAY_ALL, TRANSFER_COMPANY }
+        TRANSFER_COMPANY, STATEMENT }
 
     /** Plafond d'un virement vers une entreprise (10 M€ en centimes, comme l'API). */
     public static final long MAX_TRANSFER = 1_000_000_000L;
@@ -93,11 +93,15 @@ public class ActionPacket {
             return BankCardItem.hasAnyCard(p) ? "Cette carte ne vous appartient pas." : "Votre carte est requise.";
         }
 
+        boolean outgoing = a == Action.WITHDRAW || a == Action.TRANSFER || a == Action.TRANSFER_COMPANY;
+        if (outgoing && d.isFrozen(id)) return "Votre compte est gelé. Rapprochez-vous de votre banquier.";
+
         switch (a) {
             case DEPOSIT_ALL: {
                 long cash = Money.takeAllCash(p);
                 if (cash <= 0) return "Aucune espèce à déposer.";
                 d.add(id, cash);
+                d.log(id, BankTx.DEPOSIT, cash, "Dépôt d'espèces", d.name(id));
                 return "Dépôt de " + Money.format(cash) + " effectué.";
             }
             case DEPOSIT: {
@@ -106,6 +110,7 @@ public class ActionPacket {
                 if (cash < amount) return "Pas assez d'espèces sur vous.";
                 Money.takeAllCash(p);
                 d.add(id, amount);
+                d.log(id, BankTx.DEPOSIT, amount, "Dépôt d'espèces", d.name(id));
                 Money.giveCash(p, cash - amount);
                 return "Dépôt de " + Money.format(amount) + " effectué.";
             }
@@ -114,6 +119,7 @@ public class ActionPacket {
                 if (amount > MAX_WITHDRAW) return "Maximum par retrait : " + Money.format(MAX_WITHDRAW) + ".";
                 if (d.balance(id) < amount) return "Solde insuffisant.";
                 d.add(id, -amount);
+                d.log(id, BankTx.WITHDRAW, -amount, "Retrait d'espèces", d.name(id));
                 Money.giveCash(p, amount);
                 return "Retrait de " + Money.format(amount) + " effectué.";
             }
@@ -128,6 +134,8 @@ public class ActionPacket {
                 if (d.balance(id) < amount) return "Solde insuffisant.";
                 d.add(id, -amount);
                 d.add(to, amount);
+                d.log(id, BankTx.PAYMENT, -amount, "Virement à " + d.name(to), d.name(id));
+                d.log(to, BankTx.INCOME, amount, "Virement de " + d.name(id), d.name(id));
                 ServerPlayer tp = p.server.getPlayerList().getPlayer(to);
                 if (tp != null) {
                     tp.sendSystemMessage(Component.literal(d.name(id)
@@ -152,24 +160,9 @@ public class ActionPacket {
                 if (!r.ok()) return r.message();
                 return "Virement de " + Money.format(amount) + " envoyé à " + d.name(to) + ".";
             }
-            case LOAN_REQUEST: {
-                int days;
-                try {
-                    days = Integer.parseInt(target.trim());
-                } catch (NumberFormatException e) {
-                    return "Durée invalide.";
-                }
-                return LoanService.request(p, amount, days);
-            }
-            case LOAN_CANCEL:
-                return LoanService.cancel(p);
-            case LOAN_REPAY:
-                return LoanService.repay(p, amount);
-            case LOAN_REPAY_ALL: {
-                Loan l = d.openLoanOf(id);
-                if (l == null || l.status == Loan.PENDING) return "Aucun prêt à rembourser.";
-                return LoanService.repay(p, l.remaining());
-            }
+            case STATEMENT:
+                com.minenorth_eurobank.banker.StatementService.send(p, id);
+                return "";
             default:
                 return "";
         }

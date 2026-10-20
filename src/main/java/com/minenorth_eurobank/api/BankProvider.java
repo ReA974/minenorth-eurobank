@@ -25,7 +25,7 @@ public final class BankProvider implements fr.minenorth.api.BankService {
     /** Enregistre une ligne d'historique sur un compte entreprise ; le solde après opération est lu ici. */
     private static void record(MinecraftServer s, UUID account, long signedCents, String cat, String label, String actor) {
         BankData d = BankData.get(s);
-        if (!d.isBusiness(account)) return;
+        if (!d.has(account)) return;
         d.record(account, new BankTx(System.currentTimeMillis(), cat, signedCents, d.balance(account), label, actor));
     }
 
@@ -58,6 +58,7 @@ public final class BankProvider implements fr.minenorth.api.BankService {
         if (cents <= 0) return fr.minenorth.api.PayResult.INVALID_AMOUNT;
         BankData d = BankData.get(s);
         if (!d.has(player)) return fr.minenorth.api.PayResult.NO_ACCOUNT;
+        if (d.isFrozen(player)) return fr.minenorth.api.PayResult.UNAVAILABLE;
         if (!allowNegative && d.balance(player) < cents) return fr.minenorth.api.PayResult.INSUFFICIENT_FUNDS;
         d.add(player, -cents);
         MineNorth.treasury().collect(s, cents, source);
@@ -76,12 +77,13 @@ public final class BankProvider implements fr.minenorth.api.BankService {
         if (cents <= 0 || from.equals(to)) return fr.minenorth.api.PayResult.INVALID_AMOUNT;
         BankData d = BankData.get(s);
         if (!d.has(from) || !d.has(to)) return fr.minenorth.api.PayResult.NO_ACCOUNT;
+        if (d.isFrozen(from)) return fr.minenorth.api.PayResult.UNAVAILABLE;
         if (d.balance(from) < cents) return fr.minenorth.api.PayResult.INSUFFICIENT_FUNDS;
         d.add(from, -cents);
         d.add(to, cents);
         boolean noLabel = label == null || label.isEmpty();
-        if (d.isBusiness(from)) record(s, from, -cents, catOut, noLabel ? d.name(to) : label, actor);
-        if (d.isBusiness(to)) record(s, to, cents, catIn, noLabel ? d.name(from) : label, actor);
+        record(s, from, -cents, catOut, noLabel ? d.name(to) : label, actor);
+        record(s, to, cents, catIn, noLabel ? d.name(from) : label, actor);
         return fr.minenorth.api.PayResult.OK;
     }
 
@@ -133,6 +135,7 @@ public final class BankProvider implements fr.minenorth.api.BankService {
         BankData d = BankData.get(s);
         if (!d.isBusiness(accountId)) return fr.minenorth.api.PayResult.NO_ACCOUNT;
         if (actor != null && !d.signers(accountId).contains(actor)) return fr.minenorth.api.PayResult.FOREIGN_CARD;
+        if (d.isFrozen(accountId)) return fr.minenorth.api.PayResult.UNAVAILABLE;
         if (d.balance(accountId) < cents) return fr.minenorth.api.PayResult.INSUFFICIENT_FUNDS;
         d.add(accountId, -cents);
         MineNorth.treasury().collect(s, cents, source);

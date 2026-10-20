@@ -18,7 +18,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class Network {
-    private static final String PROTOCOL = "7";   // 7 : virement ATM vers une entreprise (liste dans StatePacket, cible 64)
+    private static final String PROTOCOL = "11";   // 11 : guichet complet, relevé graphique, coffres-forts ; 10 : offres de prêt
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(EuroBank.MODID, "main"), () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
 
@@ -35,9 +35,13 @@ public final class Network {
         int id = 0;
         CHANNEL.registerMessage(id++, ActionPacket.class, ActionPacket::encode, ActionPacket::decode, ActionPacket::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER));
         CHANNEL.registerMessage(id++, StatePacket.class, StatePacket::encode, StatePacket::decode, StatePacket::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT));
-        CHANNEL.registerMessage(id++, BankerPacket.class, BankerPacket::encode, BankerPacket::decode, BankerPacket::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER));
-        CHANNEL.registerMessage(id++, BankerListPacket.class, BankerListPacket::encode, BankerListPacket::decode, BankerListPacket::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(id++, TabletPacket.class, TabletPacket::encode, TabletPacket::decode, TabletPacket::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(id++, TabletDataPacket.class, TabletDataPacket::encode, TabletDataPacket::decode, TabletDataPacket::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(id++, WatchPacket.class, WatchPacket::encode, WatchPacket::decode, WatchPacket::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(id++, DeskPacket.class, DeskPacket::encode, DeskPacket::decode, DeskPacket::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(id++, DeskSubmitPacket.class, DeskSubmitPacket::encode, DeskSubmitPacket::decode, DeskSubmitPacket::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(id++, DeskMenuPacket.class, DeskMenuPacket::encode, DeskMenuPacket::decode, DeskMenuPacket::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(id++, StatementPacket.class, StatementPacket::encode, StatementPacket::decode, StatementPacket::handle, java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT));
     }
 
     public static void openAtm(ServerPlayer p, BlockPos pos) {
@@ -49,12 +53,10 @@ public final class Network {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> p), StatePacket.compute(p, open, message));
     }
 
-    public static void sendBankerList(ServerPlayer p, boolean open, String message) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> p), BankerListPacket.compute(p, open, message));
-    }
-
     public static void unwatchAll(UUID id) {
         LAST_ACTION.remove(id);
+        com.minenorth_eurobank.banker.TabletService.VIEWS.remove(id);
+        com.minenorth_eurobank.banker.LoanDesk.close(id);
         WATCH_ATM.remove(id);
         WATCH_BANKER.remove(id);
     }
@@ -66,7 +68,7 @@ public final class Network {
             UUID id = p.getUUID();
             if (WATCH_ATM.contains(id)) sendState(p, false, "");
             if (atmOnly) continue;
-            if (WATCH_BANKER.contains(id) && LoanService.isBanker(p)) sendBankerList(p, false, "");
+            if (WATCH_BANKER.contains(id) && LoanService.isBanker(p)) com.minenorth_eurobank.banker.TabletService.push(p, false, "");
         }
     }
 

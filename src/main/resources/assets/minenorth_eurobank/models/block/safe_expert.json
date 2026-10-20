@@ -1,0 +1,12 @@
+{
+    "parent":  "minenorth_eurobank:block/safe_base",
+    "textures":  {
+                     "body":  "minenorth_eurobank:block/safe_expert_body",
+                     "door":  "minenorth_eurobank:block/safe_expert_door",
+                     "frame":  "minenorth_eurobank:block/safe_expert_frame",
+                     "dark":  "minenorth_eurobank:block/safe_expert_dark",
+                     "dial":  "minenorth_eurobank:block/safe_expert_dial",
+                     "keypad":  "minenorth_eurobank:block/safe_expert_keypad",
+                     "plate":  "minenorth_eurobank:block/safe_expert_plate"
+                 }
+}

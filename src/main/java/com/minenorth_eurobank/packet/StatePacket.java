@@ -31,6 +31,11 @@ public class StatePacket {
     public final int[] termRatesBp;
     /** Entreprises listées (virement ATM), triées par nom, au plus {@link #MAX_COMPANIES}. */
     public final List<CompanyEntry> companies;
+    /** Somme pour solder le prêt maintenant (intérêts au prorata si remboursement anticipé). */
+    public final long loanPayoff;
+    /** Offre de prêt du banquier en attente de réponse (offerPrincipal 0 = aucune). */
+    public final long offerPrincipal, offerExpiryMs;
+    public final int offerTerm, offerRateBp;
 
     public static final int MAX_COMPANIES = 100;
     private static final int COMPANY_NAME_MAX = 64;
@@ -41,7 +46,8 @@ public class StatePacket {
     public StatePacket(boolean open, boolean hasAccount, boolean hasCard, boolean foreignCard, boolean admin, boolean banker,
                        long balance, long cash, String message, String name,
                        int loanStatus, int loanTerm, long loanPrincipal, long loanTotal, long loanRepaid, long loanDueMs,
-                       int loanRateBp, int[] termRatesBp, List<CompanyEntry> companies) {
+                       int loanRateBp, int[] termRatesBp, List<CompanyEntry> companies,
+                       long loanPayoff, long offerPrincipal, int offerTerm, int offerRateBp, long offerExpiryMs) {
         this.open = open;
         this.hasAccount = hasAccount;
         this.hasCard = hasCard;
@@ -61,6 +67,11 @@ public class StatePacket {
         this.loanRateBp = loanRateBp;
         this.termRatesBp = termRatesBp;
         this.companies = companies;
+        this.loanPayoff = loanPayoff;
+        this.offerPrincipal = offerPrincipal;
+        this.offerTerm = offerTerm;
+        this.offerRateBp = offerRateBp;
+        this.offerExpiryMs = offerExpiryMs;
     }
 
     /** Entreprises listées, déjà triées par {@link BankData#listedBusinesses()}, tronquées à 100 et à 64 caractères. */
@@ -84,11 +95,15 @@ public class StatePacket {
         boolean own = BankCardItem.hasOwnCard(p);
         boolean foreign = !own && BankCardItem.hasAnyCard(p);
         Loan l = acc ? d.openLoanOf(id) : null;
+        Loan offer = acc ? LoanService.offerOf(d, id) : null;
         return new StatePacket(open, acc, own, foreign, p.hasPermissions(2), LoanService.isBanker(p),
                 acc ? d.balance(id) : 0, Money.cashIn(p), message, name,
                 l == null ? -1 : l.status, l == null ? 0 : l.termDays,
                 l == null ? 0 : l.principal, l == null ? 0 : l.totalDue, l == null ? 0 : l.repaid, l == null ? 0 : l.dueMs,
-                l == null ? 0 : l.rateBp, d.termRates(), companies(d));
+                l == null ? 0 : l.rateBp, d.termRates(), companies(d),
+                l == null ? 0 : LoanService.payoff(l, System.currentTimeMillis()),
+                offer == null ? 0 : offer.principal, offer == null ? 0 : offer.termDays, offer == null ? 0 : offer.rateBp,
+                offer == null ? 0 : offer.createdMs + LoanService.OFFER_VALID_MS);
     }
 
     public static void encode(StatePacket m, FriendlyByteBuf b) {
@@ -117,13 +132,19 @@ public class StatePacket {
             b.writeUUID(c.id());
             b.writeUtf(c.name(), COMPANY_NAME_MAX);
         }
+        b.writeLong(m.loanPayoff);
+        b.writeLong(m.offerPrincipal);
+        b.writeInt(m.offerTerm);
+        b.writeInt(m.offerRateBp);
+        b.writeLong(m.offerExpiryMs);
     }
 
     public static StatePacket decode(FriendlyByteBuf b) {
         return new StatePacket(b.readBoolean(), b.readBoolean(), b.readBoolean(), b.readBoolean(), b.readBoolean(), b.readBoolean(),
                 b.readLong(), b.readLong(), b.readUtf(256), b.readUtf(64),
                 b.readInt(), b.readInt(), b.readLong(), b.readLong(), b.readLong(), b.readLong(),
-                b.readInt(), readRates(b), readCompanies(b));
+                b.readInt(), readRates(b), readCompanies(b),
+                b.readLong(), b.readLong(), b.readInt(), b.readInt(), b.readLong());
     }
 
     private static List<CompanyEntry> readCompanies(FriendlyByteBuf b) {

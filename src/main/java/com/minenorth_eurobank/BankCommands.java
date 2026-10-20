@@ -28,6 +28,26 @@ public final class BankCommands {
                                 .then(Commands.argument("amount", DoubleArgumentType.doubleArg(0.01))
                                         .executes(BankCommands::pay))))
                 .then(Commands.literal("banquier").executes(BankCommands::openBanker))
+                // Pour un PNJ Custom NPC : /bank guichet @dp  (menu : prêt, contacter le banquier, achats)
+                .then(Commands.literal("guichet").requires(s -> s.hasPermission(2))
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .executes(c -> {
+                                    com.minenorth_eurobank.banker.LoanDesk.openMenu(EntityArgument.getPlayer(c, "player"));
+                                    return 1;
+                                })))
+                // /bank pret @dp ouvre directement le formulaire de demande de prêt
+                .then(Commands.literal("pret").requires(s -> s.hasPermission(2))
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .executes(BankCommands::openLoanDesk)))
+                .then(Commands.literal("tablette").requires(s -> s.hasPermission(2))
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .executes(BankCommands::giveTablet)))
+                .then(Commands.literal("gel").requires(s -> s.hasPermission(2))
+                        .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                                .executes(c -> freeze(c, true)))
+                        .then(Commands.literal("off")
+                                .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                                        .executes(c -> freeze(c, false)))))
                 .then(Commands.literal("banker").requires(s -> s.hasPermission(2))
                         .then(Commands.literal("add")
                                 .then(Commands.argument("player", GameProfileArgument.gameProfile())
@@ -87,9 +107,12 @@ public final class BankCommands {
         if (!d.has(from.getUUID())) return fail(c, "Vous n'avez pas de compte.");
         if (!d.has(to.getUUID())) return fail(c, d.name(to.getUUID()) + " n'a pas de compte.");
         if (amount <= 0) return fail(c, "Montant invalide.");
+        if (d.isFrozen(from.getUUID())) return fail(c, "Votre compte est gelé.");
         if (d.balance(from.getUUID()) < amount) return fail(c, "Solde insuffisant.");
         d.add(from.getUUID(), -amount);
         d.add(to.getUUID(), amount);
+        d.log(from.getUUID(), fr.minenorth.api.BankTx.PAYMENT, -amount, "Virement à " + d.name(to.getUUID()), d.name(from.getUUID()));
+        d.log(to.getUUID(), fr.minenorth.api.BankTx.INCOME, amount, "Virement de " + d.name(from.getUUID()), d.name(from.getUUID()));
         to.sendSystemMessage(Component.literal(d.name(from.getUUID()) + " vous a envoyé " + Money.format(amount) + "."));
         return ok(c, "Virement de " + Money.format(amount) + " envoyé à " + d.name(to.getUUID()) + ".");
     }
@@ -97,8 +120,29 @@ public final class BankCommands {
     private static int openBanker(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         ServerPlayer p = c.getSource().getPlayerOrException();
         if (!LoanService.isBanker(p)) return fail(c, "Vous n'êtes pas banquier.");
-        Network.sendBankerList(p, true, "");
+        com.minenorth_eurobank.banker.TabletService.open(p);
         return 1;
+    }
+
+    /** Commande lancée par le PNJ banquier (Custom NPC) : ouvre le formulaire de demande de prêt du joueur. */
+    private static int openLoanDesk(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
+        ServerPlayer p = EntityArgument.getPlayer(c, "player");
+        com.minenorth_eurobank.banker.LoanDesk.open(p);
+        return 1;
+    }
+
+    private static int giveTablet(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
+        ServerPlayer p = EntityArgument.getPlayer(c, "player");
+        Money.giveStack(p, new net.minecraft.world.item.ItemStack(com.minenorth_eurobank.items.ModItems.BANKER_TABLET.get()));
+        return ok(c, "Tablette banquier remise à " + p.getGameProfile().getName() + ".");
+    }
+
+    private static int freeze(CommandContext<CommandSourceStack> c, boolean on) throws CommandSyntaxException {
+        GameProfile gp = GameProfileArgument.getGameProfiles(c, "player").iterator().next();
+        BankData d = BankData.get(c.getSource().getServer());
+        if (!d.has(gp.getId())) return fail(c, gp.getName() + " n'a pas de compte.");
+        d.setFrozen(gp.getId(), on);
+        return ok(c, "Compte de " + d.name(gp.getId()) + (on ? " gelé." : " dégelé."));
     }
 
     private static int banker(CommandContext<CommandSourceStack> c, boolean on) throws CommandSyntaxException {
@@ -133,6 +177,7 @@ public final class BankCommands {
             case ADD:
                 d.open(id);
                 d.add(id, amount);
+                d.log(id, fr.minenorth.api.BankTx.ADMIN, amount, "Ajout administratif", null);
                 return ok(c, Money.format(amount) + " ajoutés à " + who + ". Solde : " + Money.format(d.balance(id)));
             case SET:
                 d.open(id);
@@ -142,6 +187,7 @@ public final class BankCommands {
                 if (!d.has(id)) return fail(c, who + " n'a pas de compte.");
                 if (d.balance(id) < amount) return fail(c, "Solde insuffisant (" + Money.format(d.balance(id)) + ").");
                 d.add(id, -amount);
+                d.log(id, fr.minenorth.api.BankTx.ADMIN, -amount, "Retrait administratif", null);
                 return ok(c, Money.format(amount) + " retirés à " + who + ". Solde : " + Money.format(d.balance(id)));
             default:
                 return 0;
