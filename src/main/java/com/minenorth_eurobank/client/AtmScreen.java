@@ -5,7 +5,8 @@ import com.minenorth_eurobank.EuroBank;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.resources.ResourceLocation;
 import com.minenorth_eurobank.packet.ActionPacket.Action;
-import com.minenorth_eurobank.packet.BankerPacket;
+import com.minenorth_eurobank.packet.TabletPacket;
+import com.minenorth_eurobank.banker.TabletOp;
 import com.minenorth_eurobank.loan.Loan;
 import com.minenorth_eurobank.loan.LoanService;
 import com.minenorth_eurobank.Money;
@@ -182,7 +183,7 @@ public class AtmScreen extends Screen {
                 addRenderableWidget(btn(104, 88, 88, 24, "Prêt", CYAN, () -> setPage(Page.LOAN)));
                 if (st.banker) {
                     addRenderableWidget(btn(196, 88, 88, 24, "Banquier", CYAN, () ->
-                            Network.CHANNEL.sendToServer(new BankerPacket(BankerPacket.Op.LIST, new UUID(0, 0), 0))));
+                            Network.CHANNEL.sendToServer(TabletPacket.op(TabletOp.OPEN, null, 0))));
                 }
                 addRenderableWidget(new AtmButton(left + 104, top + 168, 180, 22, Component.empty(), AtmButton.PINK,
                         () -> send(Action.WITHDRAW, QUICK))
@@ -263,22 +264,7 @@ public class AtmScreen extends Screen {
             }
             case LOAN -> {
                 if (st.loanStatus < 0) {
-                    amountBox = box(104, 55, 118, "Montant en €");
-                    amountBox.setValue(amountText);
-                    addRenderableWidget(amountBox);
-                    setInitialFocus(amountBox);
-                    for (int i = 0; i < LoanService.TERMS.length; i++) {
-                        int days = LoanService.TERMS[i];
-                        addRenderableWidget(btn(104 + i * 36, 86, 33, 16, days + " j",
-                                days == loanTerm ? CYAN : AtmButton.DARK, () -> {
-                                    saveTexts();
-                                    loanTerm = days;
-                                    rebuildWidgets();
-                                }));
-                    }
-                    addRenderableWidget(btn(104, 168, 60, 22, "Retour", AtmButton.DARK, () -> setPage(Page.HOME)));
-                    addRenderableWidget(btn(168, 168, 116, 22, "Faire la demande", CYAN,
-                            () -> send(Action.LOAN_REQUEST, amountInput(), String.valueOf(loanTerm))));
+                    addRenderableWidget(btn(104, 168, 180, 22, "Retour", AtmButton.DARK, () -> setPage(Page.HOME)));
                     return;
                 } else if (st.loanStatus == Loan.PENDING) {
                     addRenderableWidget(btn(104, 118, 180, 20, "Annuler la demande", AtmButton.DARK,
@@ -434,26 +420,18 @@ public class AtmScreen extends Screen {
     private void renderLoan(GuiGraphics g) {
         if (st.loanStatus < 0) {
             line(g, "Prêt bancaire", 36, CYAN);
-            line(g, "Montant :", 46, TEXT);
-            line(g, "Durée :", 77, TEXT);
-            int idx = Math.max(0, LoanService.termIndex(loanTerm));
-            int bp = idx < st.termRatesBp.length ? st.termRatesBp[idx] : 0;
-            line(g, "Taux " + LoanService.rateLabel(bp) + " (sur " + loanTerm + " j)", 106, CYAN);
-            long amt = amountBox == null ? -1 : Money.parseEuros(amountBox.getValue());
-            if (amt > 0) {
-                long interest = LoanService.interest(amt, bp);
-                line(g, "Intérêts : " + Money.format(interest), 116, TEXT);
-                g.drawString(font, bold("À rembourser : " + Money.format(amt + interest)), left + 104, top + 126, 0xFFFFFFFF, false);
-            } else {
-                line(g, "De " + (LoanService.MIN / 100) + " € à " + (LoanService.MAX / 100) + " €", 116, TEXT);
-            }
+            line(g, "Pour faire une demande de prêt,", 56, TEXT);
+            line(g, "présentez-vous auprès du banquier", 68, TEXT);
+            line(g, "à la banque.", 80, TEXT);
+            line(g, "Il étudiera votre dossier et vous", 96, TEXT);
+            line(g, "rappellera par téléphone.", 108, TEXT);
         } else if (st.loanStatus == Loan.PENDING) {
             line(g, "Prêt bancaire", 36, CYAN);
             line(g, "Demande en attente", 50, WARN);
             line(g, "Montant : " + Money.format(st.loanPrincipal), 62, TEXT);
             line(g, "Durée : " + st.loanTerm + " jours", 74, TEXT);
             line(g, "Taux : " + LoanService.rateLabel(st.loanRateBp), 86, CYAN);
-            line(g, "Un banquier doit la valider.", 100, TEXT);
+            line(g, "Le banquier va vous rappeler.", 100, TEXT);
         } else {
             boolean late = st.loanStatus == Loan.OVERDUE;
             line(g, late ? "PRÊT EN RETARD" : "Prêt en cours", 36, late ? ALERT : CYAN);

@@ -18,6 +18,15 @@ public class Loan {
     public long repaid;
     public long dueMs;
     public byte status;
+    // --- dossier de demande (rempli au guichet auprès du banquier PNJ)
+    public byte type;          // index dans LoanService.TYPES
+    public byte housing;       // index dans LoanService.HOUSING
+    public byte income;        // index dans LoanService.INCOME
+    public long downPayment;   // apport personnel en centimes
+    public String phone = "";  // numéro à 4 chiffres pour rappeler le client
+    public String reason = "";
+    /** Vrai si le prêt est déjà passé en retard au moins une fois (sert au score de fiabilité). */
+    public boolean wasLate;
 
     public Loan(UUID id, UUID borrower, long principal, int termDays, long createdMs) {
         this.id = id;
@@ -45,6 +54,13 @@ public class Loan {
         t.putLong("repaid", repaid);
         t.putLong("due", dueMs);
         t.putByte("status", status);
+        t.putByte("type", type);
+        t.putByte("housing", housing);
+        t.putByte("income", income);
+        t.putLong("down", downPayment);
+        t.putString("phone", phone);
+        t.putString("reason", reason);
+        t.putBoolean("late", wasLate);
         return t;
     }
 
@@ -55,6 +71,13 @@ public class Loan {
         l.repaid = t.getLong("repaid");
         l.dueMs = t.getLong("due");
         l.status = t.getByte("status");
+        l.type = t.getByte("type");
+        l.housing = t.getByte("housing");
+        l.income = t.getByte("income");
+        l.downPayment = t.getLong("down");
+        l.phone = t.getString("phone");
+        l.reason = t.getString("reason");
+        l.wasLate = t.getBoolean("late");
         return l;
     }
 }

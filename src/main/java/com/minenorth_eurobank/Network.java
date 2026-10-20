@@ -18,7 +18,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class Network {
-    private static final String PROTOCOL = "7";   // 7 : virement ATM vers une entreprise (liste dans StatePacket, cible 64)
+    private static final String PROTOCOL = "8";   // 8 : tablette banquier (TabletPacket, TabletDataPacket) et guichet de prêt (DeskPacket, DeskSubmitPacket)
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(EuroBank.MODID, "main"), () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
 
@@ -35,9 +35,11 @@ public final class Network {
         int id = 0;
         CHANNEL.registerMessage(id++, ActionPacket.class, ActionPacket::encode, ActionPacket::decode, ActionPacket::handle);
         CHANNEL.registerMessage(id++, StatePacket.class, StatePacket::encode, StatePacket::decode, StatePacket::handle);
-        CHANNEL.registerMessage(id++, BankerPacket.class, BankerPacket::encode, BankerPacket::decode, BankerPacket::handle);
-        CHANNEL.registerMessage(id++, BankerListPacket.class, BankerListPacket::encode, BankerListPacket::decode, BankerListPacket::handle);
+        CHANNEL.registerMessage(id++, TabletPacket.class, TabletPacket::encode, TabletPacket::decode, TabletPacket::handle);
+        CHANNEL.registerMessage(id++, TabletDataPacket.class, TabletDataPacket::encode, TabletDataPacket::decode, TabletDataPacket::handle);
         CHANNEL.registerMessage(id++, WatchPacket.class, WatchPacket::encode, WatchPacket::decode, WatchPacket::handle);
+        CHANNEL.registerMessage(id++, DeskPacket.class, DeskPacket::encode, DeskPacket::decode, DeskPacket::handle);
+        CHANNEL.registerMessage(id++, DeskSubmitPacket.class, DeskSubmitPacket::encode, DeskSubmitPacket::decode, DeskSubmitPacket::handle);
     }
 
     public static void openAtm(ServerPlayer p, BlockPos pos) {
@@ -49,11 +51,9 @@ public final class Network {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> p), StatePacket.compute(p, open, message));
     }
 
-    public static void sendBankerList(ServerPlayer p, boolean open, String message) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> p), BankerListPacket.compute(p, open, message));
-    }
-
     public static void unwatchAll(UUID id) {
+        com.minenorth_eurobank.banker.TabletService.VIEWS.remove(id);
+        com.minenorth_eurobank.banker.LoanDesk.close(id);
         WATCH_ATM.remove(id);
         WATCH_BANKER.remove(id);
     }
@@ -65,7 +65,7 @@ public final class Network {
             UUID id = p.getUUID();
             if (WATCH_ATM.contains(id)) sendState(p, false, "");
             if (atmOnly) continue;
-            if (WATCH_BANKER.contains(id) && LoanService.isBanker(p)) sendBankerList(p, false, "");
+            if (WATCH_BANKER.contains(id) && LoanService.isBanker(p)) com.minenorth_eurobank.banker.TabletService.push(p, false, "");
         }
     }
 

@@ -1,7 +1,8 @@
 package com.minenorth_eurobank.client;
 
-import com.minenorth_eurobank.packet.BankerListPacket;
+import com.minenorth_eurobank.packet.DeskPacket;
 import com.minenorth_eurobank.packet.StatePacket;
+import com.minenorth_eurobank.packet.TabletDataPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
@@ -16,9 +17,15 @@ public final class ClientHooks {
         else if (m.open) mc.setScreen(new AtmScreen(m));
     }
 
-    public static void handleBanker(BankerListPacket m) {
+    public static void handleTablet(TabletDataPacket m) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.screen instanceof BankerScreen s) s.update(m);
-        else if (m.open) mc.setScreen(new BankerScreen(m, mc.screen instanceof AtmScreen a ? a : null));
+        if (mc.screen instanceof TabletScreen s) s.update(m.data);
+        else if (m.open) mc.setScreen(new TabletScreen(m.data));
+    }
+
+    public static void handleDesk(DeskPacket m) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.screen instanceof LoanDeskScreen s) s.update(m);
+        else if (m.open) mc.setScreen(new LoanDeskScreen(m));
     }
 }

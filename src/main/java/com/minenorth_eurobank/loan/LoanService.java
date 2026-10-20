@@ -2,6 +2,7 @@ package com.minenorth_eurobank.loan;
 
 import com.minenorth_eurobank.BankData;
 import com.minenorth_eurobank.Money;
+import fr.minenorth.api.BankTx;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -19,6 +20,10 @@ public final class LoanService {
     public static final long MAX = 50_000_00L;
     public static final int MAX_RATE_BP = 10_000;      // 100 %
     public static final int[] TERMS = {1, 3, 7, 14, 30};
+    public static final String[] TYPES = {"Personnel", "Immobilier", "Véhicule", "Entreprise", "Autre"};
+    public static final String[] HOUSING = {"Propriétaire", "Locataire", "Sans logement"};
+    public static final String[] INCOME = {"Salarié", "Gérant d'entreprise", "Indépendant", "Sans revenu"};
+    public static final int REASON_MAX = 120;
     private static final long DAY_MS = 86_400_000L;
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(ZoneId.systemDefault());
 
@@ -63,19 +68,46 @@ public final class LoanService {
     }
 
     // ---- côté emprunteur
-    public static String request(ServerPlayer p, long amount, int days) {
+    /** Dossier saisi au guichet (PNJ banquier). */
+    public record Application(long amount, int days, int type, int housing, int income, long down, String phone, String reason) {}
+
+    public static String request(ServerPlayer p, Application a) {
         BankData d = BankData.get(p.server);
         UUID id = p.getUUID();
-        if (!d.has(id)) return "Vous n'avez pas de compte.";
-        if (amount < MIN || amount > MAX) return "Montant : entre " + Money.format(MIN) + " et " + Money.format(MAX) + ".";
-        if (!validTerm(days)) return "Durée invalide.";
+        if (!d.has(id)) return "Vous n'avez pas de compte : ouvrez-en un à un distributeur (ATM).";
+        if (a.amount() < MIN || a.amount() > MAX) return "Montant : entre " + Money.format(MIN) + " et " + Money.format(MAX) + ".";
+        if (!validTerm(a.days())) return "Durée invalide.";
+        if (a.type() < 0 || a.type() >= TYPES.length || a.housing() < 0 || a.housing() >= HOUSING.length
+                || a.income() < 0 || a.income() >= INCOME.length) return "Dossier incomplet.";
+        if (a.down() < 0 || a.down() > a.amount()) return "Apport invalide (entre 0 et le montant demandé).";
+        if (a.phone() == null || !a.phone().matches("\\d{4}")) return "Le numéro de téléphone doit comporter 4 chiffres.";
         if (d.openLoanOf(id) != null) return "Vous avez déjà un prêt ou une demande en cours.";
-        Loan l = new Loan(UUID.randomUUID(), id, amount, days, System.currentTimeMillis());
-        l.rateBp = d.termRate(days);   // taux annoncé au joueur, que le banquier peut ajuster
+        Loan l = new Loan(UUID.randomUUID(), id, a.amount(), a.days(), System.currentTimeMillis());
+        l.rateBp = d.termRate(a.days());   // taux annoncé au joueur, que le banquier peut ajuster
+        l.type = (byte) a.type();
+        l.housing = (byte) a.housing();
+        l.income = (byte) a.income();
+        l.downPayment = a.down();
+        l.phone = a.phone();
+        String reason = a.reason() == null ? "" : a.reason().strip();
+        l.reason = reason.length() > REASON_MAX ? reason.substring(0, REASON_MAX) : reason;
         d.addLoan(l);
-        tellBankers(p.server, d.name(p.getUUID()) + " demande un prêt de " + Money.format(amount) + " sur " + days
-                + " jours (taux " + rateLabel(l.rateBp) + ").");
-        return "Demande envoyée. Un banquier va l'examiner.";
+        tellBankers(p.server, d.name(id) + " demande un prêt " + TYPES[l.type].toLowerCase(Locale.ROOT) + " de "
+                + Money.format(a.amount()) + " sur " + a.days() + " jours. Tél. " + l.phone + ".");
+        return "Demande envoyée. Le banquier vous rappellera au " + l.phone + ".";
+    }
+
+    /** Score de fiabilité 0-100 d'un client d'après ses prêts passés (50 = aucun historique). */
+    public static int trust(BankData d, UUID account) {
+        int score = 50;
+        for (Loan l : d.loans()) {
+            if (!l.borrower.equals(account)) continue;
+            if (l.status == Loan.REPAID) score += l.wasLate ? 4 : 10;
+            else if (l.status == Loan.OVERDUE) score -= 25;
+            else if (l.status == Loan.FORGIVEN) score -= 5;
+            if (l.wasLate && l.status != Loan.REPAID) score -= 10;
+        }
+        return Math.max(0, Math.min(100, score));
     }
 
     public static String cancel(ServerPlayer p) {
@@ -92,11 +124,13 @@ public final class LoanService {
         UUID id = p.getUUID();
         Loan l = d.openLoanOf(id);
         if (l == null || l.status == Loan.PENDING) return "Aucun prêt à rembourser.";
+        if (d.isFrozen(id)) return "Votre compte est gelé.";
         if (amount <= 0) return "Montant invalide.";
         long pay = Math.min(amount, l.remaining());
         if (d.balance(id) < pay) return "Solde insuffisant.";
         d.add(id, -pay);
         d.addReserve(pay);
+        d.log(id, BankTx.PAYMENT, -pay, "Remboursement de prêt", d.name(id));
         l.repaid += pay;
         if (l.remaining() == 0) l.status = Loan.REPAID;
         d.setDirty();
@@ -118,6 +152,7 @@ public final class LoanService {
         l.status = Loan.ACTIVE;
         d.addReserve(-l.principal);
         d.add(l.borrower, l.principal);
+        d.log(l.borrower, BankTx.INCOME, l.principal, "Prêt accordé", null);
         d.setDirty();
         tell(s, l.borrower, "Votre prêt de " + Money.format(l.principal) + " est accepté (taux " + rateLabel(rateBp) + "). À rembourser : " + Money.format(l.totalDue) + " avant le " + date(l.dueMs) + ".");
         return "Prêt de " + Money.format(l.principal) + " accordé à " + d.name(l.borrower) + ".";
@@ -160,6 +195,7 @@ public final class LoanService {
             if (pay > 0) {
                 d.add(l.borrower, -pay);
                 d.addReserve(pay);
+                d.log(l.borrower, BankTx.PAYMENT, -pay, "Prélèvement de prêt", null);
                 l.repaid += pay;
                 d.setDirty();
                 tell(s, l.borrower, "Prélèvement de " + Money.format(pay) + " sur votre compte pour votre prêt.");
@@ -170,6 +206,7 @@ public final class LoanService {
                 tell(s, l.borrower, "Votre prêt est intégralement remboursé.");
             } else if (l.status == Loan.ACTIVE) {
                 l.status = Loan.OVERDUE;
+                l.wasLate = true;
                 d.setDirty();
                 tell(s, l.borrower, "Votre prêt est en retard. Reste à payer : " + Money.format(l.remaining()) + ".");
                 tellBankers(s, d.name(l.borrower) + " est en retard sur son prêt (reste " + Money.format(l.remaining()) + ").");

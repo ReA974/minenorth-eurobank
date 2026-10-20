@@ -22,6 +22,11 @@ public final class BankApi {
 
     private BankApi() {}
 
+    private static PayResult frozen(ServerPlayer p) {
+        p.sendSystemMessage(net.minecraft.network.chat.Component.literal("§c[Banque] Ce compte est gelé."));
+        return PayResult.UNAVAILABLE;
+    }
+
     public static boolean hasAccount(ServerPlayer p) {
         return BankData.get(p.server).has(p.getUUID());
     }
@@ -38,6 +43,7 @@ public final class BankApi {
         BankData d = BankData.get(p.server);
         UUID id = p.getUUID();
         if (!d.has(id)) return PayResult.NO_ACCOUNT;
+        if (d.isFrozen(id)) return frozen(p);
         if (!BankCardItem.hasOwnCard(p)) return BankCardItem.hasAnyCard(p) ? PayResult.FOREIGN_CARD : PayResult.NO_CARD;
         if (d.balance(id) < cents) return PayResult.INSUFFICIENT_FUNDS;
         return PayResult.OK;
@@ -54,6 +60,7 @@ public final class BankApi {
         ItemStack card = p.getItemInHand(InteractionHand.MAIN_HAND);
         if (!BusinessCardItem.validFor(p, card, d)) return PayResult.FOREIGN_CARD;
         if (cents <= 0 || cents > MAX_CENTS) return PayResult.INVALID_AMOUNT;
+        if (d.isFrozen(BusinessCardItem.account(card))) return frozen(p);
         if (d.balance(BusinessCardItem.account(card)) < cents) return PayResult.INSUFFICIENT_FUNDS;
         return PayResult.OK;
     }
@@ -72,8 +79,10 @@ public final class BankApi {
         }
         PayResult r = check(p, cents);
         if (r == PayResult.OK) {
-            BankData.get(p.server).add(p.getUUID(), -cents);
+            BankData d = BankData.get(p.server);
+            d.add(p.getUUID(), -cents);
             fr.minenorth.api.MineNorth.treasury().collect(p.server, cents, source);
+            d.log(p.getUUID(), BankTx.PAYMENT, -cents, source, d.name(p.getUUID()));
         }
         return r;
     }
@@ -92,6 +101,7 @@ public final class BankApi {
         if (cents > 0 && d.has(p.getUUID())) {
             d.add(p.getUUID(), cents);
             fr.minenorth.api.MineNorth.treasury().collect(p.server, -cents, "remboursement");
+            d.log(p.getUUID(), BankTx.INCOME, cents, "remboursement", null);
         }
     }
 }

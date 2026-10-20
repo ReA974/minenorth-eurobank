@@ -84,7 +84,7 @@ public class EuroBank {
                 long pending = d.loans().stream().filter(l -> l.status == Loan.PENDING).count();
                 if (pending > 0) {
                     sp.sendSystemMessage(Component.literal("[Banque] " + pending
-                            + " demande(s) de prêt en attente. Ouvrez un ATM ou tapez /bank banquier."));
+                            + " demande(s) de prêt en attente. Ouvrez votre tablette ou tapez /bank banquier."));
                 }
             }
         }

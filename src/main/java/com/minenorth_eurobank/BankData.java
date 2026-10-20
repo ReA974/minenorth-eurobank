@@ -43,6 +43,39 @@ public class BankData extends SavedData {
     /** Taux (points de base) appliqué sur la durée du prêt, par durée, dans l'ordre de LoanService.TERMS : 1, 3, 7, 14, 30 jours. */
     private final int[] termRates = {100, 250, 500, 800, 1200};
     private boolean refreshPending;
+    /** Comptes gelés (joueurs ou entreprises) : plus aucune sortie d'argent. */
+    private final Set<UUID> frozen = new HashSet<>();
+    /** Notes privées du banquier, par compte. */
+    private final Map<UUID, String> notes = new HashMap<>();
+    private final List<Alert> alerts = new ArrayList<>();
+    /** Seuil (centimes) au-delà duquel un mouvement déclenche une alerte. */
+    private long alertThreshold = 5_000_00L;
+    /** Dernier braquage de coffre (ms), 0 = aucun : les gros dépôts qui suivent sont suspects. */
+    private long lastHeistMs;
+
+    public static final int MAX_ALERTS = 100;
+    public static final long HEIST_WINDOW_MS = 60L * 60_000L;
+    /** Dépôt/virement entrant jugé suspect après un braquage. */
+    public static final long HEIST_SUSPECT = 500_00L;
+
+    /** Alerte automatique pour le banquier. */
+    public static final class Alert {
+        public final UUID id;
+        public final long time;
+        public final UUID account;
+        public final String text;
+        public final long cents;
+        public boolean handled;
+
+        public Alert(UUID id, long time, UUID account, String text, long cents, boolean handled) {
+            this.id = id;
+            this.time = time;
+            this.account = account;
+            this.text = text;
+            this.cents = cents;
+            this.handled = handled;
+        }
+    }
 
     /** Serveur courant (non sauvegardé) : sert à lire l'identité RP pour les noms affichés. */
     private transient MinecraftServer server;
@@ -86,6 +119,18 @@ public class BankData extends SavedData {
             }
             d.history.put(t.getUUID("id"), log);
         }
+        ListTag fz = tag.getList("frozen", Tag.TAG_INT_ARRAY);
+        for (int i = 0; i < fz.size(); i++) d.frozen.add(NbtUtils.loadUUID(fz.get(i)));
+        ListTag nt = tag.getList("notes", Tag.TAG_COMPOUND);
+        for (int i = 0; i < nt.size(); i++) d.notes.put(nt.getCompound(i).getUUID("id"), nt.getCompound(i).getString("text"));
+        ListTag al = tag.getList("alerts", Tag.TAG_COMPOUND);
+        for (int i = 0; i < al.size(); i++) {
+            CompoundTag a = al.getCompound(i);
+            d.alerts.add(new Alert(a.getUUID("id"), a.getLong("time"), a.getUUID("account"), a.getString("text"),
+                    a.getLong("cents"), a.getBoolean("handled")));
+        }
+        if (tag.contains("threshold")) d.alertThreshold = tag.getLong("threshold");
+        d.lastHeistMs = tag.getLong("heist");
         d.reserve = tag.getLong("reserve");
         if (tag.hasUUID("institution")) d.institution = tag.getUUID("institution");
         if (tag.contains("rates")) {
@@ -149,6 +194,31 @@ public class BankData extends SavedData {
             hs.add(t);
         });
         tag.put("history", hs);
+        ListTag fz = new ListTag();
+        for (UUID f : frozen) fz.add(NbtUtils.createUUID(f));
+        tag.put("frozen", fz);
+        ListTag nt = new ListTag();
+        notes.forEach((id, text) -> {
+            CompoundTag t = new CompoundTag();
+            t.putUUID("id", id);
+            t.putString("text", text);
+            nt.add(t);
+        });
+        tag.put("notes", nt);
+        ListTag al = new ListTag();
+        for (Alert a : alerts) {
+            CompoundTag t = new CompoundTag();
+            t.putUUID("id", a.id);
+            t.putLong("time", a.time);
+            t.putUUID("account", a.account);
+            t.putString("text", a.text);
+            t.putLong("cents", a.cents);
+            t.putBoolean("handled", a.handled);
+            al.add(t);
+        }
+        tag.put("alerts", al);
+        tag.putLong("threshold", alertThreshold);
+        tag.putLong("heist", lastHeistMs);
         tag.putLong("reserve", reserve);
         if (institution != null) tag.putUUID("institution", institution);
         tag.putIntArray("rates", termRates);
@@ -274,6 +344,8 @@ public class BankData extends SavedData {
         names.remove(id);
         signers.remove(id);
         history.remove(id);
+        frozen.remove(id);
+        notes.remove(id);
         setDirty();
     }
 
@@ -287,8 +359,111 @@ public class BankData extends SavedData {
     }
 
     public void record(UUID account, BankTx tx) {
-        history.computeIfAbsent(account, k -> new TxLog()).add(tx);
+        TxLog log = history.computeIfAbsent(account, k -> new TxLog());
+        log.add(tx);
+        detect(account, tx, log);
         setDirty();
+    }
+
+    /** Enregistre une opération déjà appliquée au solde (le solde après opération est lu ici). */
+    public void log(UUID account, String category, long signedCents, String label, String actor) {
+        record(account, new BankTx(System.currentTimeMillis(), category, signedCents, balance(account), label, actor));
+    }
+
+    /** Alertes automatiques : gros mouvement, rafale d'opérations, gros dépôt juste après un braquage. */
+    private void detect(UUID account, BankTx tx, TxLog log) {
+        long abs = Math.abs(tx.cents());
+        String who = displayAccount(account);
+        if (abs >= alertThreshold) {
+            addAlert(account, "Gros mouvement de " + Money.format(tx.cents()) + " sur " + who, tx.cents());
+        }
+        long now = tx.time();
+        if (tx.cents() > 0 && lastHeistMs > 0 && now - lastHeistMs <= HEIST_WINDOW_MS && abs >= HEIST_SUSPECT
+                && !BankTx.ADMIN.equals(tx.category())) {
+            addAlert(account, "Entrée suspecte après un braquage : " + Money.format(tx.cents()) + " sur " + who, tx.cents());
+        }
+        int recent = 0;
+        for (BankTx x : log.latest(12)) if (now - x.time() <= 10 * 60_000L) recent++;
+        if (recent == 10) {
+            addAlert(account, "10 opérations en moins de 10 minutes sur " + who, tx.cents());
+        }
+    }
+
+    private String displayAccount(UUID id) {
+        return (business.contains(id) ? "l'entreprise " : "") + name(id);
+    }
+
+    public void addAlert(UUID account, String text, long cents) {
+        alerts.add(new Alert(UUID.randomUUID(), System.currentTimeMillis(), account, text, cents, false));
+        while (alerts.size() > MAX_ALERTS) alerts.remove(0);
+        setDirty();
+        if (server != null) {
+            for (net.minecraft.server.level.ServerPlayer sp : server.getPlayerList().getPlayers()) {
+                if (bankers.contains(sp.getUUID())) {
+                    sp.sendSystemMessage(net.minecraft.network.chat.Component.literal("§c[Banque] Alerte : " + text));
+                }
+            }
+        }
+    }
+
+    public List<Alert> alerts() { return Collections.unmodifiableList(alerts); }
+
+    public long openAlerts() { return alerts.stream().filter(a -> !a.handled).count(); }
+
+    public void handleAlert(UUID id) {
+        for (Alert a : alerts) if (a.id.equals(id) && !a.handled) { a.handled = true; setDirty(); }
+    }
+
+    public void handleAllAlerts() {
+        for (Alert a : alerts) a.handled = true;
+        setDirty();
+    }
+
+    public long alertThreshold() { return alertThreshold; }
+
+    public void setAlertThreshold(long cents) {
+        alertThreshold = cents;
+        setDirty();
+    }
+
+    /** Appelé quand un coffre de banque est ouvert : les gros dépôts qui suivent seront signalés. */
+    public void markHeist() {
+        lastHeistMs = System.currentTimeMillis();
+        setDirty();
+    }
+
+    // --- gel et notes
+    public boolean isFrozen(UUID id) { return frozen.contains(id); }
+
+    public void setFrozen(UUID id, boolean on) {
+        if (on ? frozen.add(id) : frozen.remove(id)) setDirty();
+    }
+
+    public String note(UUID id) { return notes.getOrDefault(id, ""); }
+
+    public void setNote(UUID id, String text) {
+        if (text == null || text.isBlank()) notes.remove(id);
+        else notes.put(id, text);
+        setDirty();
+    }
+
+    /** Tous les comptes (joueurs et entreprises). */
+    public Set<UUID> accountIds() { return Collections.unmodifiableSet(balances.keySet()); }
+
+    public Set<UUID> businesses() { return Collections.unmodifiableSet(business); }
+
+    /** Une opération avec le compte concerné (flux global de la tablette banquier). */
+    public record AccountTx(UUID account, BankTx tx) {}
+
+    /** Dernières opérations de tous les comptes (ou d'un seul si {@code filter} n'est pas null), les plus récentes d'abord. */
+    public List<AccountTx> recent(UUID filter, int limit) {
+        List<AccountTx> all = new ArrayList<>();
+        for (Map.Entry<UUID, TxLog> e : history.entrySet()) {
+            if (filter != null && !filter.equals(e.getKey())) continue;
+            for (BankTx t : e.getValue().latest(limit)) all.add(new AccountTx(e.getKey(), t));
+        }
+        all.sort((a, b) -> Long.compare(b.tx().time(), a.tx().time()));
+        return all.size() > limit ? new ArrayList<>(all.subList(0, limit)) : all;
     }
 
     public List<BankTx> history(UUID account, int limit) {

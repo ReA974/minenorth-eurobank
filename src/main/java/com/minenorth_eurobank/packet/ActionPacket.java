@@ -89,11 +89,15 @@ public class ActionPacket {
             return BankCardItem.hasAnyCard(p) ? "Cette carte ne vous appartient pas." : "Votre carte est requise.";
         }
 
+        boolean outgoing = a == Action.WITHDRAW || a == Action.TRANSFER || a == Action.TRANSFER_COMPANY;
+        if (outgoing && d.isFrozen(id)) return "Votre compte est gelé. Rapprochez-vous de votre banquier.";
+
         switch (a) {
             case DEPOSIT_ALL: {
                 long cash = Money.takeAllCash(p);
                 if (cash <= 0) return "Aucune espèce à déposer.";
                 d.add(id, cash);
+                d.log(id, BankTx.DEPOSIT, cash, "Dépôt d'espèces", d.name(id));
                 return "Dépôt de " + Money.format(cash) + " effectué.";
             }
             case DEPOSIT: {
@@ -102,6 +106,7 @@ public class ActionPacket {
                 if (cash < amount) return "Pas assez d'espèces sur vous.";
                 Money.takeAllCash(p);
                 d.add(id, amount);
+                d.log(id, BankTx.DEPOSIT, amount, "Dépôt d'espèces", d.name(id));
                 Money.giveCash(p, cash - amount);
                 return "Dépôt de " + Money.format(amount) + " effectué.";
             }
@@ -110,6 +115,7 @@ public class ActionPacket {
                 if (amount > MAX_WITHDRAW) return "Maximum par retrait : " + Money.format(MAX_WITHDRAW) + ".";
                 if (d.balance(id) < amount) return "Solde insuffisant.";
                 d.add(id, -amount);
+                d.log(id, BankTx.WITHDRAW, -amount, "Retrait d'espèces", d.name(id));
                 Money.giveCash(p, amount);
                 return "Retrait de " + Money.format(amount) + " effectué.";
             }
@@ -122,6 +128,8 @@ public class ActionPacket {
                 if (d.balance(id) < amount) return "Solde insuffisant.";
                 d.add(id, -amount);
                 d.add(to, amount);
+                d.log(id, BankTx.PAYMENT, -amount, "Virement à " + d.name(to), d.name(id));
+                d.log(to, BankTx.INCOME, amount, "Virement de " + d.name(id), d.name(id));
                 ServerPlayer tp = p.server.getPlayerList().getPlayer(to);
                 if (tp != null) {
                     tp.sendSystemMessage(Component.literal(d.name(id)
@@ -146,15 +154,8 @@ public class ActionPacket {
                 if (!r.ok()) return r.message();
                 return "Virement de " + Money.format(amount) + " envoyé à " + d.name(to) + ".";
             }
-            case LOAN_REQUEST: {
-                int days;
-                try {
-                    days = Integer.parseInt(target.trim());
-                } catch (NumberFormatException e) {
-                    return "Durée invalide.";
-                }
-                return LoanService.request(p, amount, days);
-            }
+            case LOAN_REQUEST:
+                return "Les demandes de prêt se font auprès du banquier, à la banque.";
             case LOAN_CANCEL:
                 return LoanService.cancel(p);
             case LOAN_REPAY:

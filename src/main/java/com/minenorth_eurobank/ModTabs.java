@@ -14,6 +14,7 @@ public final class ModTabs {
 
     public static final net.minecraft.world.item.CreativeModeTab.DisplayItemsGenerator TAB_ITEMS = (params, out) -> {
                         ModItems.MONEY.values().forEach(r -> out.accept(r.get()));
+                        out.accept(ModItems.BANKER_TABLET.get());
                         out.accept(ModItems.ATM_ITEM.get());
                         out.accept(ModItems.ATM_BASE_ITEM.get());
                     };

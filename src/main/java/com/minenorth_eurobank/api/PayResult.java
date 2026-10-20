@@ -7,7 +7,8 @@ public enum PayResult {
     NO_ACCOUNT("Vous n'avez pas de compte bancaire."),
     NO_CARD("Votre carte bancaire est requise."),
     FOREIGN_CARD("Cette carte ne vous appartient pas."),
-    INSUFFICIENT_FUNDS("Solde insuffisant.");
+    INSUFFICIENT_FUNDS("Solde insuffisant."),
+    UNAVAILABLE("Votre compte est gelé.");
 
     private final String message;
 
