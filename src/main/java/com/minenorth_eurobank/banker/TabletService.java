@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** Logique serveur de la tablette banquier : construit les vues (NBT) et applique les actions. */
 public final class TabletService {
-    public static final int TAB_LOANS = 0, TAB_ACCOUNTS = 1, TAB_TX = 2, TAB_ALERTS = 3, TAB_CONTACTS = 4, TAB_RATES = 5;
+    public static final int TAB_LOANS = 0, TAB_ACCOUNTS = 1, TAB_TX = 2, TAB_ALERTS = 3, TAB_CONTACTS = 4, TAB_REPORT = 5, TAB_RATES = 6;
     public static final int MAX_ROWS = 200;
     public static final int NOTE_MAX = 200;
 
@@ -83,6 +83,24 @@ public final class TabletService {
             case HANDLE_CONTACT:
                 d.handleContact(id);
                 return "";
+            case REMIND:
+                return LoanService.remind(s, id, num);
+            case WAIVE:
+                return LoanService.waive(s, id, (int) num);
+            case OFFER: {
+                String[] parts = text == null ? new String[0] : text.split(";");
+                if (parts.length != 2) return "Offre invalide.";
+                try {
+                    return LoanService.offer(s, id, num, Integer.parseInt(parts[0].trim()), Integer.parseInt(parts[1].trim()));
+                } catch (NumberFormatException e) {
+                    return "Offre invalide.";
+                }
+            }
+            case STATEMENT: {
+                if (!d.has(id)) return "Compte introuvable.";
+                Money.giveStack(p, Statement.book(d, id));
+                return "Relevé de " + d.name(id) + " ajouté à votre inventaire.";
+            }
             case SET_THRESHOLD:
                 if (num < 100_00L || num > 100_000_000_00L) return "Seuil invalide (100 € à 100 000 000 €).";
                 d.setAlertThreshold(num);
@@ -122,6 +140,7 @@ public final class TabletService {
             case TAB_TX -> transactions(d, v, out, rows);
             case TAB_ALERTS -> alerts(d, v, rows);
             case TAB_CONTACTS -> contacts(d, v, rows);
+            case TAB_REPORT -> report(d, v, rows);
             default -> { }
         }
         out.put("rows", rows);
@@ -163,7 +182,7 @@ public final class TabletService {
     }
 
     private static void loans(BankData d, View v, ListTag rows) {
-        List<Loan> list = d.loans().stream().filter(l -> l.status <= Loan.OVERDUE)
+        List<Loan> list = d.loans().stream().filter(l -> l.status <= Loan.OVERDUE || l.status == Loan.OFFERED)
                 .sorted(Comparator.comparingInt((Loan l) -> l.status == Loan.PENDING ? 0 : l.status == Loan.OVERDUE ? 1 : 2)
                         .thenComparingLong(l -> l.createdMs))
                 .limit(MAX_ROWS).toList();
@@ -173,6 +192,9 @@ public final class TabletService {
             if (l.status == Loan.PENDING) {
                 right = "demande " + Money.format(l.principal);
                 color = 1;
+            } else if (l.status == Loan.OFFERED) {
+                right = "offre " + Money.format(l.principal);
+                color = 1;
             } else if (l.status == Loan.OVERDUE) {
                 right = "RETARD " + Money.format(l.remaining());
                 color = 2;
@@ -180,7 +202,8 @@ public final class TabletService {
                 right = "reste " + Money.format(l.remaining());
                 color = 0;
             }
-            CompoundTag r = row(l.id, d.name(l.borrower), right, color);
+            CompoundTag r = row(l.id, d.name(l.borrower) + (l.remindMs > 0 ? "  [rappel " + LoanService.date(l.remindMs).substring(0, 5) + "]" : ""),
+                    right, color);
             r.putUUID("a", l.borrower);
             r.putInt("s", l.status);
             r.putInt("rate", l.rateBp);
@@ -192,7 +215,11 @@ public final class TabletService {
                         + "  |  Apport : " + Money.format(l.downPayment));
                 x.add("Téléphone : " + (l.phone.isEmpty() ? "?" : l.phone) + "  |  Fiabilité : " + LoanService.trust(d, l.borrower) + "/100");
                 if (!l.reason.isEmpty()) wrap(x, "Motif : ", l.reason, 52);
-                if (l.status == Loan.PENDING) {
+                if (l.remindMs > 0) x.add("Rappel prévu le " + LoanService.date(l.remindMs));
+                if (l.status == Loan.OFFERED) {
+                    x.add("Offre : " + Money.format(l.principal) + " sur " + l.termDays + " jours, taux " + LoanService.rateLabel(l.rateBp));
+                    x.add("Valable jusqu'au " + LoanService.date(l.createdMs + LoanService.OFFER_VALID_MS));
+                } else if (l.status == Loan.PENDING) {
                     x.add("Demande : " + Money.format(l.principal) + " sur " + l.termDays + " jours");
                     long after = d.reserve() - l.principal;
                     x.add(after >= 0 ? "Capital après prêt : " + Money.format(after) : "Capital insuffisant pour ce prêt");
@@ -206,6 +233,24 @@ public final class TabletService {
         }
     }
 
+    /** Identifiant fixe de la ligne « semaine en cours » de l'onglet Rapport. */
+    private static final UUID CURRENT_WEEK = new UUID(0L, 1L);
+
+    private static void report(BankData d, View v, ListTag rows) {
+        String since = d.weekStartMs() == 0 ? "" : LoanService.date(d.weekStartMs()).substring(0, 10);
+        CompoundTag cur = row(CURRENT_WEEK, "Semaine en cours" + (since.isEmpty() ? "" : " (depuis le " + since + ")"), "", 1);
+        if (CURRENT_WEEK.equals(v.selected())) details(cur, WeeklyReport.lines(d));
+        rows.add(cur);
+        List<BankData.Report> past = new ArrayList<>(d.reports());
+        Collections.reverse(past);
+        for (BankData.Report r : past) {
+            CompoundTag row = row(r.id, "Du " + LoanService.date(r.startMs).substring(0, 10) + " au " + LoanService.date(r.endMs).substring(0, 10),
+                    "", 0);
+            if (r.id.equals(v.selected())) details(row, r.lines);
+            rows.add(row);
+        }
+    }
+
     private static void contacts(BankData d, View v, ListTag rows) {
         List<BankData.Contact> list = new ArrayList<>(d.contacts());
         Collections.reverse(list);
@@ -213,13 +258,15 @@ public final class TabletService {
         for (BankData.Contact c : list) {
             if (n++ >= MAX_ROWS) break;
             String date = LoanService.date(c.time);
-            CompoundTag r = row(c.id, (c.handled ? "" : "! ") + c.first + " " + c.last + "  -  tél. " + c.phone,
+            CompoundTag r = row(c.id, (c.handled ? "" : "! ") + c.first + " " + c.last + "  -  tél. " + c.phone
+                    + (c.remindMs > 0 ? "  [rappel " + LoanService.date(c.remindMs).substring(0, 5) + "]" : ""),
                     date.substring(0, 5) + " " + date.substring(11), c.handled ? 0 : 1);
             r.putUUID("a", c.player);
             r.putBoolean("done", c.handled);
             if (c.id.equals(v.selected())) {
                 List<String> x = new ArrayList<>();
                 x.add("Le " + date + (c.handled ? "  (traité)" : ""));
+                if (c.remindMs > 0) x.add("Rappel prévu le " + LoanService.date(c.remindMs));
                 x.add("Contact : " + c.first + " " + c.last + "  |  Tél. " + c.phone);
                 x.add("Compte : " + (d.has(c.player) ? d.name(c.player) : "aucun"));
                 wrap(x, "Demande : ", c.message, 52);

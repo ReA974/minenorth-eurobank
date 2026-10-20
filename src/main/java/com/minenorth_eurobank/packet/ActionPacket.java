@@ -19,7 +19,8 @@ import java.util.function.Supplier;
 /** Client -> serveur : action demandée à l'ATM. Tout est revalidé côté serveur. */
 public class ActionPacket {
     public enum Action { OPEN_ACCOUNT, NEW_CARD, DEPOSIT_ALL, DEPOSIT, WITHDRAW, TRANSFER,
-        LOAN_REQUEST, LOAN_CANCEL, LOAN_REPAY, LOAN_REPAY_ALL, TRANSFER_COMPANY }
+        LOAN_REQUEST, LOAN_CANCEL, LOAN_REPAY, LOAN_REPAY_ALL, TRANSFER_COMPANY,
+        OFFER_ACCEPT, OFFER_DECLINE, STATEMENT }
 
     /** Plafond d'un virement vers une entreprise (10 M€ en centimes, comme l'API). */
     public static final long MAX_TRANSFER = 1_000_000_000L;
@@ -160,11 +161,15 @@ public class ActionPacket {
                 return LoanService.cancel(p);
             case LOAN_REPAY:
                 return LoanService.repay(p, amount);
-            case LOAN_REPAY_ALL: {
-                Loan l = d.openLoanOf(id);
-                if (l == null || l.status == Loan.PENDING) return "Aucun prêt à rembourser.";
-                return LoanService.repay(p, l.remaining());
-            }
+            case LOAN_REPAY_ALL:
+                return LoanService.repayAll(p);
+            case OFFER_ACCEPT:
+                return LoanService.acceptOffer(p);
+            case OFFER_DECLINE:
+                return LoanService.declineOffer(p);
+            case STATEMENT:
+                Money.giveStack(p, com.minenorth_eurobank.banker.Statement.book(d, id));
+                return "Votre relevé de compte vous a été remis (livre).";
             default:
                 return "";
         }

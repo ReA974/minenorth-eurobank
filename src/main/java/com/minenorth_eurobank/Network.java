@@ -18,7 +18,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class Network {
-    private static final String PROTOCOL = "9";   // 8 : tablette banquier (TabletPacket, TabletDataPacket) et guichet de prêt (DeskPacket, DeskSubmitPacket)
+    private static final String PROTOCOL = "10";   // 10 : offres de prêt, remboursement anticipé, relevé (StatePacket, ActionPacket) ; 9 : menu du guichet
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(EuroBank.MODID, "main"), () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
 

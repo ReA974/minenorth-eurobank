@@ -134,9 +134,21 @@ public class BankData extends SavedData {
             CompoundTag c = ct.getCompound(i);
             d.contacts.add(new Contact(c.getUUID("id"), c.getLong("time"), c.getUUID("player"), c.getString("first"),
                     c.getString("last"), c.getString("phone"), c.getString("message"), c.getBoolean("handled")));
+            d.contacts.get(d.contacts.size() - 1).remindMs = c.getLong("remind");
         }
         if (tag.contains("threshold")) d.alertThreshold = tag.getLong("threshold");
         d.lastHeistMs = tag.getLong("heist");
+        d.weekStartMs = tag.getLong("weekStart");
+        CompoundTag wk = tag.getCompound("week");
+        for (String k : wk.getAllKeys()) d.week.put(k, wk.getLong(k));
+        ListTag rp = tag.getList("reports", Tag.TAG_COMPOUND);
+        for (int i = 0; i < rp.size(); i++) {
+            CompoundTag r = rp.getCompound(i);
+            List<String> lines = new ArrayList<>();
+            ListTag ln = r.getList("lines", Tag.TAG_STRING);
+            for (int j = 0; j < ln.size(); j++) lines.add(ln.getString(j));
+            d.reports.add(new Report(r.getUUID("id"), r.getLong("start"), r.getLong("end"), lines));
+        }
         d.reserve = tag.getLong("reserve");
         if (tag.hasUUID("institution")) d.institution = tag.getUUID("institution");
         if (tag.contains("rates")) {
@@ -234,11 +246,28 @@ public class BankData extends SavedData {
             t.putString("phone", c.phone);
             t.putString("message", c.message);
             t.putBoolean("handled", c.handled);
+            t.putLong("remind", c.remindMs);
             ct.add(t);
         }
         tag.put("contacts", ct);
         tag.putLong("threshold", alertThreshold);
         tag.putLong("heist", lastHeistMs);
+        tag.putLong("weekStart", weekStartMs);
+        CompoundTag wk = new CompoundTag();
+        week.forEach(wk::putLong);
+        tag.put("week", wk);
+        ListTag rp = new ListTag();
+        for (Report r : reports) {
+            CompoundTag t = new CompoundTag();
+            t.putUUID("id", r.id);
+            t.putLong("start", r.startMs);
+            t.putLong("end", r.endMs);
+            ListTag ln = new ListTag();
+            for (String x : r.lines) ln.add(net.minecraft.nbt.StringTag.valueOf(x));
+            t.put("lines", ln);
+            rp.add(t);
+        }
+        tag.put("reports", rp);
         tag.putLong("reserve", reserve);
         if (institution != null) tag.putUUID("institution", institution);
         tag.putIntArray("rates", termRates);
@@ -414,6 +443,7 @@ public class BankData extends SavedData {
     }
 
     public void addAlert(UUID account, String text, long cents) {
+        week.merge("alertsN", 1L, Long::sum);
         alerts.add(new Alert(UUID.randomUUID(), System.currentTimeMillis(), account, text, cents, false));
         while (alerts.size() > MAX_ALERTS) alerts.remove(0);
         setDirty();
@@ -436,6 +466,8 @@ public class BankData extends SavedData {
         public final UUID player;
         public final String first, last, phone, message;
         public boolean handled;
+        /** Heure (ms) à laquelle rappeler ce client ; 0 = aucun rappel programmé. */
+        public long remindMs;
 
         public Contact(UUID id, long time, UUID player, String first, String last, String phone, String message, boolean handled) {
             this.id = id;
@@ -451,12 +483,59 @@ public class BankData extends SavedData {
 
     private final List<Contact> contacts = new ArrayList<>();
 
+    // --- rapport hebdomadaire : compteurs de la semaine en cours et rapports passés
+    public static final int MAX_REPORTS = 12;
+
+    /** Rapport d'une semaine écoulée (lignes de texte déjà formatées). */
+    public static final class Report {
+        public final UUID id;
+        public final long startMs, endMs;
+        public final List<String> lines;
+
+        public Report(UUID id, long startMs, long endMs, List<String> lines) {
+            this.id = id;
+            this.startMs = startMs;
+            this.endMs = endMs;
+            this.lines = lines;
+        }
+    }
+
+    private final Map<String, Long> week = new HashMap<>();
+    private final List<Report> reports = new ArrayList<>();
+    private long weekStartMs;
+
+    public void addStat(String key, long delta) {
+        week.merge(key, delta, Long::sum);
+        setDirty();
+    }
+
+    public long stat(String key) { return week.getOrDefault(key, 0L); }
+
+    public long weekStartMs() { return weekStartMs; }
+
+    public void setWeekStart(long ms) {
+        weekStartMs = ms;
+        setDirty();
+    }
+
+    public List<Report> reports() { return Collections.unmodifiableList(reports); }
+
+    /** Archive le rapport de la semaine écoulée et remet les compteurs à zéro. */
+    public void closeWeek(long endMs, List<String> lines) {
+        reports.add(new Report(UUID.randomUUID(), weekStartMs, endMs, lines));
+        while (reports.size() > MAX_REPORTS) reports.remove(0);
+        week.clear();
+        weekStartMs = endMs;
+        setDirty();
+    }
+
     public List<Contact> contacts() { return Collections.unmodifiableList(contacts); }
 
     public long openContacts() { return contacts.stream().filter(c -> !c.handled).count(); }
 
     public void addContact(UUID player, String first, String last, String phone, String message) {
         contacts.add(new Contact(UUID.randomUUID(), System.currentTimeMillis(), player, first, last, phone, message, false));
+        week.merge("contactsN", 1L, Long::sum);
         while (contacts.size() > MAX_CONTACTS) contacts.remove(0);
         setDirty();
         if (server != null) {
@@ -467,6 +546,11 @@ public class BankData extends SavedData {
                 }
             }
         }
+    }
+
+    public Contact contact(UUID id) {
+        for (Contact c : contacts) if (c.id.equals(id)) return c;
+        return null;
     }
 
     public boolean hasOpenContact(UUID player) {

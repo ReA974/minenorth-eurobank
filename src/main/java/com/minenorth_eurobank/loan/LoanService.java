@@ -135,6 +135,156 @@ public final class LoanService {
         return "Demande annulée.";
     }
 
+    // ---- offres de prêt (proposées par le banquier)
+    public static final long OFFER_VALID_MS = 7L * DAY_MS;
+
+    /** Offre en cours et encore valable pour ce joueur, ou null. */
+    public static Loan offerOf(BankData d, UUID borrower) {
+        long now = System.currentTimeMillis();
+        for (Loan l : d.loans()) {
+            if (l.status == Loan.OFFERED && l.borrower.equals(borrower) && now - l.createdMs <= OFFER_VALID_MS) return l;
+        }
+        return null;
+    }
+
+    public static String offer(MinecraftServer s, UUID account, long amount, int days, int rateBp) {
+        BankData d = BankData.get(s);
+        if (!d.has(account) || d.isBusiness(account)) return "Une offre ne peut être faite qu'à un compte de joueur.";
+        if (amount < MIN || amount > MAX) return "Montant : entre " + Money.format(MIN) + " et " + Money.format(MAX) + ".";
+        if (!validTerm(days)) return "Durée invalide.";
+        if (rateBp < 0 || rateBp > MAX_RATE_BP) return "Taux invalide (0 à " + (MAX_RATE_BP / 100) + " %).";
+        if (d.openLoanOf(account) != null) return d.name(account) + " a déjà un prêt ou une demande en cours.";
+        if (offerOf(d, account) != null) return d.name(account) + " a déjà une offre en attente.";
+        if (d.reserve() < amount) return "Capital insuffisant : " + Money.format(d.reserve()) + " disponibles.";
+        Loan l = new Loan(UUID.randomUUID(), account, amount, days, System.currentTimeMillis());
+        l.status = Loan.OFFERED;
+        l.rateBp = rateBp;
+        l.type = 4;
+        l.reason = "Offre du banquier";
+        d.addLoan(l);
+        d.addStat("offersN", 1);
+        tell(s, account, "Votre banquier vous propose un prêt de " + Money.format(amount) + " sur " + days + " jours (taux "
+                + rateLabel(rateBp) + "). Répondez depuis un distributeur (menu Prêt). Offre valable 7 jours.");
+        return "Offre envoyée à " + d.name(account) + ".";
+    }
+
+    public static String acceptOffer(ServerPlayer p) {
+        BankData d = BankData.get(p.server);
+        Loan l = offerOf(d, p.getUUID());
+        if (l == null) return "Aucune offre de prêt en cours.";
+        if (d.isFrozen(p.getUUID())) return "Votre compte est gelé.";
+        if (d.openLoanOf(p.getUUID()) != null) return "Vous avez déjà un prêt ou une demande en cours.";
+        if (d.reserve() < l.principal) return "La banque ne peut pas financer cette offre pour le moment.";
+        l.status = Loan.PENDING;
+        String r = approve(p.server, l.id, l.rateBp);
+        if (l.status == Loan.PENDING) l.status = Loan.OFFERED;   // échec : l'offre reste valable
+        return r;
+    }
+
+    public static String declineOffer(ServerPlayer p) {
+        BankData d = BankData.get(p.server);
+        Loan l = offerOf(d, p.getUUID());
+        if (l == null) return "Aucune offre de prêt en cours.";
+        l.status = Loan.CANCELLED;
+        d.setDirty();
+        tellBankers(p.server, d.name(p.getUUID()) + " a refusé votre offre de prêt de " + Money.format(l.principal) + ".");
+        return "Offre refusée.";
+    }
+
+    // ---- remboursement anticipé
+    /**
+     * Somme à payer pour solder le prêt maintenant. Avant l'échéance, les intérêts sont calculés au prorata des jours
+     * écoulés (jour entamé = jour dû, au moins un jour) ; en retard ou à l'échéance, c'est le reste dû normal.
+     */
+    public static long payoff(Loan l, long now) {
+        if (l.status != Loan.ACTIVE || now >= l.dueMs || l.termDays <= 0) return l.remaining();
+        long start = l.dueMs - l.termDays * DAY_MS;
+        long elapsed = Math.max(1, Math.min(l.termDays, (now - start + DAY_MS - 1) / DAY_MS));
+        long interestFull = Math.max(0, l.totalDue - l.principal);
+        long total = l.principal + (interestFull * elapsed + l.termDays / 2) / l.termDays;
+        return Math.max(0, Math.min(l.remaining(), total - l.repaid));
+    }
+
+    public static String repayAll(ServerPlayer p) {
+        BankData d = BankData.get(p.server);
+        UUID id = p.getUUID();
+        Loan l = d.openLoanOf(id);
+        if (l == null || l.status == Loan.PENDING) return "Aucun prêt à rembourser.";
+        if (d.isFrozen(id)) return "Votre compte est gelé.";
+        long pay = payoff(l, System.currentTimeMillis());
+        if (pay <= 0) {
+            if (l.status != Loan.ACTIVE || l.remaining() <= 0) return "Aucun prêt à rembourser.";
+            // déjà payé plus que le prorata des intérêts courus : le prêt est soldé
+            l.totalDue = l.repaid;
+            l.status = Loan.REPAID;
+            d.setDirty();
+            return "Prêt intégralement remboursé. Merci !";
+        }
+        if (d.balance(id) < pay) return "Solde insuffisant.";
+        long saved = l.remaining() - pay;
+        if (saved > 0) {
+            l.totalDue = l.repaid + pay;   // intérêts non courus effacés
+            d.setDirty();
+        }
+        String r = repay(p, pay);
+        return saved > 0 ? r + " Intérêts économisés : " + Money.format(saved) + "." : r;
+    }
+
+    /** Geste commercial : efface une part des intérêts restant dus. */
+    public static String waive(MinecraftServer s, UUID loanId, int percent) {
+        BankData d = BankData.get(s);
+        Loan l = d.loan(loanId);
+        if (l == null || (l.status != Loan.ACTIVE && l.status != Loan.OVERDUE)) return "Aucun prêt en cours.";
+        if (percent < 1 || percent > 100) return "Pourcentage invalide.";
+        long interestLeft = Math.max(0, l.remaining() - Math.max(0, l.principal - l.repaid));
+        long cut = interestLeft * percent / 100;
+        if (cut <= 0) return "Il ne reste plus d'intérêts à effacer.";
+        l.totalDue -= cut;
+        d.addStat("waived", cut);
+        if (l.remaining() == 0) l.status = Loan.REPAID;
+        d.setDirty();
+        tell(s, l.borrower, "Geste commercial de votre banquier : " + Money.format(cut) + " d'intérêts effacés. Reste dû : "
+                + Money.format(l.remaining()) + ".");
+        return Money.format(cut) + " d'intérêts effacés pour " + d.name(l.borrower) + ".";
+    }
+
+    // ---- rappels programmés par le banquier
+    public static String remind(MinecraftServer s, UUID id, long minutes) {
+        BankData d = BankData.get(s);
+        if (minutes < 1 || minutes > 60L * 24 * 60) return "Délai invalide.";
+        long at = System.currentTimeMillis() + minutes * 60_000L;
+        Loan l = d.loan(id);
+        BankData.Contact c = d.contact(id);
+        if (l != null && l.status <= Loan.OVERDUE) l.remindMs = at;
+        else if (c != null) c.remindMs = at;
+        else return "Dossier introuvable.";
+        d.setDirty();
+        return "Rappel programmé le " + date(at) + ".";
+    }
+
+    private static void checkReminders(MinecraftServer s, BankData d, long now) {
+        for (Loan l : d.loans()) {
+            if (l.remindMs > 0 && now >= l.remindMs) {
+                l.remindMs = 0;
+                d.addAlert(l.borrower, "Rappel : appeler " + d.name(l.borrower) + (l.phone.isEmpty() ? "" : " (tél. " + l.phone + ")")
+                        + " au sujet de son prêt", l.remaining());
+            }
+        }
+        for (BankData.Contact c : d.contacts()) {
+            if (c.remindMs > 0 && now >= c.remindMs && !c.handled) {
+                c.remindMs = 0;
+                d.addAlert(c.player, "Rappel : rappeler " + c.first + " " + c.last + " (tél. " + c.phone + ")", 0);
+            }
+        }
+    }
+
+    /** Compteurs hebdomadaires : somme encaissée et part d'intérêts (ce qui dépasse le capital restant). */
+    private static void collected(BankData d, Loan l, long pay) {
+        long principalLeft = Math.max(0, l.principal - l.repaid);
+        d.addStat("repaid", pay);
+        d.addStat("interest", Math.max(0, pay - principalLeft));
+    }
+
     public static String repay(ServerPlayer p, long amount) {
         BankData d = BankData.get(p.server);
         UUID id = p.getUUID();
@@ -147,6 +297,7 @@ public final class LoanService {
         d.add(id, -pay);
         d.addReserve(pay);
         d.log(id, BankTx.PAYMENT, -pay, "Remboursement de prêt", d.name(id));
+        collected(d, l, pay);
         l.repaid += pay;
         if (l.remaining() == 0) l.status = Loan.REPAID;
         d.setDirty();
@@ -169,6 +320,8 @@ public final class LoanService {
         d.addReserve(-l.principal);
         d.add(l.borrower, l.principal);
         d.log(l.borrower, BankTx.INCOME, l.principal, "Prêt accordé", null);
+        d.addStat("grantedN", 1);
+        d.addStat("granted", l.principal);
         d.setDirty();
         tell(s, l.borrower, "Votre prêt de " + Money.format(l.principal) + " est accepté (taux " + rateLabel(rateBp) + "). À rembourser : " + Money.format(l.totalDue) + " avant le " + date(l.dueMs) + ".");
         return "Prêt de " + Money.format(l.principal) + " accordé à " + d.name(l.borrower) + ".";
@@ -177,6 +330,12 @@ public final class LoanService {
     public static String reject(MinecraftServer s, UUID loanId) {
         BankData d = BankData.get(s);
         Loan l = d.loan(loanId);
+        if (l != null && l.status == Loan.OFFERED) {
+            l.status = Loan.CANCELLED;
+            d.setDirty();
+            tell(s, l.borrower, "Votre banquier a retiré son offre de prêt.");
+            return "Offre retirée.";
+        }
         if (l == null || l.status != Loan.PENDING) return "Demande introuvable ou déjà traitée.";
         l.status = Loan.REJECTED;
         d.setDirty();
@@ -205,6 +364,15 @@ public final class LoanService {
     public static void sweep(MinecraftServer s) {
         BankData d = BankData.get(s);
         long now = System.currentTimeMillis();
+        checkReminders(s, d, now);
+        for (Loan l : new ArrayList<>(d.loans())) {
+            if (l.status == Loan.OFFERED && now - l.createdMs > OFFER_VALID_MS) {
+                l.status = Loan.CANCELLED;
+                d.setDirty();
+                tell(s, l.borrower, "Votre offre de prêt de " + Money.format(l.principal) + " a expiré.");
+            }
+        }
+        com.minenorth_eurobank.banker.WeeklyReport.tick(s);
         for (Loan l : new ArrayList<>(d.loans())) {
             if ((l.status != Loan.ACTIVE && l.status != Loan.OVERDUE) || now < l.dueMs) continue;
             long pay = d.has(l.borrower) ? Math.min(d.balance(l.borrower), l.remaining()) : 0;
@@ -212,6 +380,7 @@ public final class LoanService {
                 d.add(l.borrower, -pay);
                 d.addReserve(pay);
                 d.log(l.borrower, BankTx.PAYMENT, -pay, "Prélèvement de prêt", null);
+                collected(d, l, pay);
                 l.repaid += pay;
                 d.setDirty();
                 tell(s, l.borrower, "Prélèvement de " + Money.format(pay) + " sur votre compte pour votre prêt.");
@@ -223,6 +392,7 @@ public final class LoanService {
             } else if (l.status == Loan.ACTIVE) {
                 l.status = Loan.OVERDUE;
                 l.wasLate = true;
+                d.addStat("overdueN", 1);
                 d.setDirty();
                 tell(s, l.borrower, "Votre prêt est en retard. Reste à payer : " + Money.format(l.remaining()) + ".");
                 tellBankers(s, d.name(l.borrower) + " est en retard sur son prêt (reste " + Money.format(l.remaining()) + ").");

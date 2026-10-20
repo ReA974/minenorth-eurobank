@@ -6,7 +6,7 @@ import java.util.UUID;
 
 /** Un prêt (ou une demande de prêt). Montants en centimes, durées en jours réels. */
 public class Loan {
-    public static final byte PENDING = 0, ACTIVE = 1, OVERDUE = 2, REPAID = 3, REJECTED = 4, FORGIVEN = 5, CANCELLED = 6;
+    public static final byte PENDING = 0, ACTIVE = 1, OVERDUE = 2, REPAID = 3, REJECTED = 4, FORGIVEN = 5, CANCELLED = 6, OFFERED = 7;
 
     public final UUID id;
     public final UUID borrower;
@@ -27,6 +27,8 @@ public class Loan {
     public String reason = "";
     /** Vrai si le prêt est déjà passé en retard au moins une fois (sert au score de fiabilité). */
     public boolean wasLate;
+    /** Heure (ms) du prochain rappel programmé par le banquier ; 0 = aucun. */
+    public long remindMs;
 
     public Loan(UUID id, UUID borrower, long principal, int termDays, long createdMs) {
         this.id = id;
@@ -61,6 +63,7 @@ public class Loan {
         t.putString("phone", phone);
         t.putString("reason", reason);
         t.putBoolean("late", wasLate);
+        t.putLong("remind", remindMs);
         return t;
     }
 
@@ -78,6 +81,7 @@ public class Loan {
         l.phone = t.getString("phone");
         l.reason = t.getString("reason");
         l.wasLate = t.getBoolean("late");
+        l.remindMs = t.getLong("remind");
         return l;
     }
 }

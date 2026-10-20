@@ -110,6 +110,80 @@ class BankerFeaturesTest {
         assertEquals(0, r.openContacts());
     }
 
+    private static Loan activeLoan(long principal, int rateBp, int days, long now, long startOffsetMs) {
+        Loan l = new Loan(UUID.randomUUID(), UUID.randomUUID(), principal, days, now + startOffsetMs);
+        l.status = Loan.ACTIVE;
+        l.rateBp = rateBp;
+        l.totalDue = principal + LoanService.interest(principal, rateBp);
+        l.dueMs = now + startOffsetMs + days * 86_400_000L;
+        return l;
+    }
+
+    @Test
+    void earlyPayoffProratesInterestAndNeverExceedsRemaining() {
+        long now = 1_000_000_000_000L;
+        long day = 86_400_000L;
+        // 1000 € sur 10 jours à 10 % = 100 € d'intérêts ; payé le 1er jour entamé -> 10 €
+        Loan l = new Loan(UUID.randomUUID(), UUID.randomUUID(), 1000_00L, 10, now);
+        l.status = Loan.ACTIVE;
+        l.rateBp = 1000;
+        l.totalDue = 1100_00L;
+        l.dueMs = now + 10 * day;
+        assertEquals(1010_00L, LoanService.payoff(l, now + 1));
+        assertEquals(1050_00L, LoanService.payoff(l, now + 4 * day + 1));   // 5e jour entamé
+        assertEquals(1100_00L, LoanService.payoff(l, now + 9 * day + day / 2 + 1));
+        // échéance dépassée : reste dû normal
+        assertEquals(1100_00L, LoanService.payoff(l, now + 11 * day));
+        // jamais plus que le reste dû après paiement partiel
+        l.repaid = 1050_00L;
+        assertEquals(40_00L, LoanService.payoff(l, now + 9 * day));
+        l.repaid = 1095_00L;   // déjà plus que le prorata dû : rien à payer
+        assertEquals(0L, LoanService.payoff(l, now + 9 * day));
+    }
+
+    @Test
+    void offerIsOnlyVisibleToItsBorrowerWhileValid() {
+        BankData d = new BankData();
+        UUID p = UUID.randomUUID(), other = UUID.randomUUID();
+        Loan o = new Loan(UUID.randomUUID(), p, 500_00L, 7, System.currentTimeMillis());
+        o.status = Loan.OFFERED;
+        d.addLoan(o);
+        assertNotNull(LoanService.offerOf(d, p));
+        assertNull(LoanService.offerOf(d, other));
+        assertNull(d.openLoanOf(p), "une offre n'est pas un prêt ouvert");
+        Loan old = new Loan(UUID.randomUUID(), other, 500_00L, 7, System.currentTimeMillis() - LoanService.OFFER_VALID_MS - 1000);
+        old.status = Loan.OFFERED;
+        d.addLoan(old);
+        assertNull(LoanService.offerOf(d, other), "offre expirée");
+    }
+
+    @Test
+    void weeklyStatsAndReportsSurviveSaveAndLoad() {
+        BankData d = new BankData();
+        d.setWeekStart(1000L);
+        d.addStat("granted", 500_00L);
+        d.addStat("granted", 250_00L);
+        assertEquals(750_00L, d.stat("granted"));
+        d.closeWeek(2000L, java.util.List.of("ligne 1", "ligne 2"));
+        assertEquals(0, d.stat("granted"), "compteurs remis à zéro");
+        assertEquals(2000L, d.weekStartMs());
+        BankData r = BankData.load(d.save(new CompoundTag()));
+        assertEquals(1, r.reports().size());
+        assertEquals(java.util.List.of("ligne 1", "ligne 2"), r.reports().get(0).lines);
+        assertEquals(2000L, r.weekStartMs());
+    }
+
+    @Test
+    void remindersSurviveSaveAndLoad() {
+        Loan l = new Loan(UUID.randomUUID(), UUID.randomUUID(), 100_00L, 7, 1L);
+        l.remindMs = 12345L;
+        assertEquals(12345L, Loan.load(l.save()).remindMs);
+        BankData d = new BankData();
+        d.addContact(UUID.randomUUID(), "A", "B", "1234", "msg");
+        d.contacts().get(0).remindMs = 999L;
+        assertEquals(999L, BankData.load(d.save(new CompoundTag())).contacts().get(0).remindMs);
+    }
+
     @Test
     void recentMergesAccountsNewestFirst() {
         BankData d = new BankData();

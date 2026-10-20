@@ -34,14 +34,17 @@ import java.util.UUID;
  */
 @OnlyIn(Dist.CLIENT)
 public class TabletScreen extends Screen {
-    private static final int W = 380, H = 238, ROWS = 6, ROW_H = 12;
+    private static final int W = 380, H = 250, ROWS = 5, ROW_H = 12;
+    private static final int[] REMIND_MIN = {60, 1440, 4320, 10080};
+    private static final String[] REMIND_LABEL = {"1 h", "1 j", "3 j", "7 j"};
+    private static final int[] WAIVE_PCT = {25, 50, 100};
     private static final int BLUE = 0xFF161048;
     private static final int CYAN = AtmButton.CYAN;
     private static final int TEXT = 0xFFCFE3FF;
     private static final int WARN = 0xFFFFE066;
     private static final int ALERT = 0xFFFF6A9A;
     private static final int N_TERMS = LoanService.TERMS.length;
-    private static final String[] TAB_NAMES = {"Prêts", "Comptes", "Opérations", "Alertes", "Contacts", "Taux"};
+    private static final String[] TAB_NAMES = {"Prêts", "Comptes", "Opér.", "Alertes", "Contacts", "Rapport", "Taux"};
     private static final ResourceLocation LOGO = new ResourceLocation(EuroBank.MODID, "textures/gui/logo.png");
 
     private record Row(UUID id, String left, String right, int color, UUID account, int status, int rate,
@@ -52,7 +55,7 @@ public class TabletScreen extends Screen {
     private int openAlerts, openContacts;
     private boolean granting;
     private String searchText = "", grantAmountText = "", grantRateText = "";
-    private int grantTerm = 7;
+    private int grantTerm = 7, remindIdx = 1, waiveIdx = 1;
     private EditBox searchBox, grantAmountBox, grantRateBox;
     private int[] termRates = new int[N_TERMS];
     private String message = "", note = "", filterName = "";
@@ -215,14 +218,14 @@ public class TabletScreen extends Screen {
 
     /** Formulaire « accorder un prêt » à la place du détail du compte sélectionné. */
     private void initGrant(int by) {
-        grantAmountBox = new EditBox(font, left + 80, top + 150, 80, 16, Component.literal("Montant"));
+        grantAmountBox = new EditBox(font, left + 80, top + 134, 80, 16, Component.literal("Montant"));
         grantAmountBox.setHint(Component.literal("Montant en €"));
         grantAmountBox.setMaxLength(9);
         grantAmountBox.setValue(grantAmountText);
         addRenderableWidget(grantAmountBox);
         for (int i = 0; i < N_TERMS; i++) {
             int days = LoanService.TERMS[i];
-            addRenderableWidget(new AtmButton(left + 80 + i * 40, top + 170, 37, 16, Component.literal(days + " j"),
+            addRenderableWidget(new AtmButton(left + 80 + i * 40, top + 154, 37, 16, Component.literal(days + " j"),
                     days == grantTerm ? CYAN : AtmButton.DARK, () -> {
                         saveTexts();
                         grantTerm = days;
@@ -230,43 +233,57 @@ public class TabletScreen extends Screen {
                         rebuildWidgets();
                     }));
         }
-        grantRateBox = new EditBox(font, left + 80, top + 190, 50, 16, Component.literal("Taux"));
+        grantRateBox = new EditBox(font, left + 80, top + 174, 50, 16, Component.literal("Taux"));
         grantRateBox.setMaxLength(6);
         grantRateBox.setValue(grantRateText);
         addRenderableWidget(grantRateBox);
-        addRenderableWidget(new AtmButton(left + 10, by, 130, 18, Component.literal("Accorder le prêt"), CYAN, () -> {
-            saveTexts();
-            long amount = Money.parseEuros(grantAmountText);
-            int bp = parseRateBp(grantRateText);
-            if (amount <= 0) {
-                message = "Indiquez le montant du prêt.";
-                return;
-            }
-            if (bp < 0) {
-                message = "Taux invalide.";
-                return;
-            }
-            granting = false;
-            lastSig = "";
-            Network.CHANNEL.sendToServer(TabletPacket.text(TabletOp.GRANT, selected, grantTerm + ";" + bp, amount));
-        }));
-        addRenderableWidget(new AtmButton(left + 144, by, 80, 18, Component.literal("Annuler"), AtmButton.DARK, () -> {
+        addRenderableWidget(new AtmButton(left + 10, by, 130, 18, Component.literal("Accorder maintenant"), CYAN, () -> submitGrant(TabletOp.GRANT)));
+        addRenderableWidget(new AtmButton(left + 144, by, 130, 18, Component.literal("Envoyer en offre"), AtmButton.DARK, () -> submitGrant(TabletOp.OFFER)));
+        addRenderableWidget(new AtmButton(left + 278, by, 80, 18, Component.literal("Annuler"), AtmButton.DARK, () -> {
             granting = false;
             lastSig = "";
             rebuildWidgets();
         }));
     }
 
+    /** Rappel programmé : un bouton pour choisir le délai, un pour valider ; le serveur prévient à l'échéance. */
+    private void remindButtons(int y, int x, boolean enabled) {
+        addRenderableWidget(new AtmButton(left + x, y, 62, 18, Component.literal("Rappel " + REMIND_LABEL[remindIdx]),
+                AtmButton.DARK, () -> {
+                    remindIdx = (remindIdx + 1) % REMIND_MIN.length;
+                    rebuildWidgets();
+                }));
+        addRenderableWidget(new AtmButton(left + x + 66, y, 82, 18, Component.literal("Programmer"), CYAN,
+                () -> send(TabletOp.REMIND, selected, REMIND_MIN[remindIdx])).enabled(enabled));
+    }
+
+    private void submitGrant(TabletOp op) {
+        saveTexts();
+        long amount = Money.parseEuros(grantAmountText);
+        int bp = parseRateBp(grantRateText);
+        if (amount <= 0) {
+            message = "Indiquez le montant du prêt.";
+            return;
+        }
+        if (bp < 0) {
+            message = "Taux invalide.";
+            return;
+        }
+        granting = false;
+        lastSig = "";
+        Network.CHANNEL.sendToServer(TabletPacket.text(op, selected, grantTerm + ";" + bp, amount));
+    }
+
     private void renderGrant(GuiGraphics g, Row sel) {
-        g.drawString(font, "Accorder un prêt à " + sel.left().replace("(en ligne) ", ""), left + 10, top + 134, CYAN, false);
-        g.drawString(font, "Montant", left + 10, top + 154, TEXT, false);
-        g.drawString(font, "Durée", left + 10, top + 174, TEXT, false);
-        g.drawString(font, "Taux (%)", left + 10, top + 194, TEXT, false);
+        g.drawString(font, "Accorder un prêt à " + sel.left().replace("(en ligne) ", ""), left + 10, top + 122, CYAN, false);
+        g.drawString(font, "Montant", left + 10, top + 138, TEXT, false);
+        g.drawString(font, "Durée", left + 10, top + 158, TEXT, false);
+        g.drawString(font, "Taux (%)", left + 10, top + 178, TEXT, false);
         long amount = Money.parseEuros(grantAmountBox == null ? "" : grantAmountBox.getValue());
         int bp = parseRateBp(grantRateBox == null ? "" : grantRateBox.getValue());
         if (amount > 0 && bp >= 0) {
             g.drawString(font, "À rembourser : " + Money.format(amount + LoanService.interest(amount, bp)),
-                    left + 140, top + 194, 0xFFFFFFFF, false);
+                    left + 140, top + 178, 0xFFFFFFFF, false);
         }
     }
 
@@ -284,7 +301,7 @@ public class TabletScreen extends Screen {
 
         addRenderableWidget(new AtmButton(left + W - 80, top + 8, 66, 14, Component.literal("Fermer"), AtmButton.GHOST, this::onClose));
         int x = left + 10;
-        int[] widths = {46, 58, 74, 66, 70, 44};
+        int[] widths = {38, 48, 38, 70, 76, 50, 34};
         for (int i = 0; i < TAB_NAMES.length; i++) {
             int idx = i;
             int badge = i == TabletService.TAB_ALERTS ? openAlerts : i == TabletService.TAB_CONTACTS ? openContacts : 0;
@@ -297,13 +314,13 @@ public class TabletScreen extends Screen {
             x += widths[i];
         }
 
-        addRenderableWidget(new AtmButton(left + W - 24, top + 56, 14, 34, Component.literal("^"), AtmButton.DARK,
+        addRenderableWidget(new AtmButton(left + W - 24, top + 56, 14, 28, Component.literal("^"), AtmButton.DARK,
                 () -> offset = Math.max(0, offset - 1)));
-        addRenderableWidget(new AtmButton(left + W - 24, top + 92, 14, 34, Component.literal("v"), AtmButton.DARK,
+        addRenderableWidget(new AtmButton(left + W - 24, top + 86, 14, 28, Component.literal("v"), AtmButton.DARK,
                 () -> offset = Math.min(Math.max(0, shown().size() - ROWS), offset + 1)));
 
         Row sel = selectedRow();
-        int by = top + 214;
+        int by = top + 196, by2 = top + 216;
         switch (tab) {
             case TabletService.TAB_LOANS -> {
                 boolean pending = sel != null && sel.status() == Loan.PENDING;
@@ -317,12 +334,22 @@ public class TabletScreen extends Screen {
                     if (bp < 0) message = "Taux invalide.";
                     else send(TabletOp.APPROVE, selected, bp);
                 }).enabled(pending));
-                addRenderableWidget(new AtmButton(left + 120, by, 54, 18, Component.literal("Refuser"), AtmButton.PINK,
-                        () -> send(TabletOp.REJECT, selected, 0)).enabled(pending));
+                boolean offered = sel != null && sel.status() == Loan.OFFERED;
+                addRenderableWidget(new AtmButton(left + 120, by, 54, 18, Component.literal(offered ? "Retirer" : "Refuser"), AtmButton.PINK,
+                        () -> send(TabletOp.REJECT, selected, 0)).enabled(pending || offered));
                 addRenderableWidget(new AtmButton(left + 178, by, 76, 18, Component.literal("Annuler dette"), AtmButton.DARK,
                         () -> send(TabletOp.FORGIVE, selected, 0)).enabled(running));
                 addRenderableWidget(new AtmButton(left + 258, by, 108, 18, Component.literal("Voir le compte"), AtmButton.DARK,
                         () -> view(TabletService.TAB_ACCOUNTS, sel.account(), null)).enabled(sel != null));
+                // geste commercial sur les intérêts restants
+                addRenderableWidget(new AtmButton(left + 10, by2, 76, 18, Component.literal("Geste " + WAIVE_PCT[waiveIdx] + " %"),
+                        AtmButton.DARK, () -> {
+                            waiveIdx = (waiveIdx + 1) % WAIVE_PCT.length;
+                            rebuildWidgets();
+                        }).enabled(running));
+                addRenderableWidget(new AtmButton(left + 90, by2, 70, 18, Component.literal("Effacer"), CYAN,
+                        () -> send(TabletOp.WAIVE, selected, WAIVE_PCT[waiveIdx])).enabled(running));
+                remindButtons(by2, 168, sel != null && sel.status() <= Loan.OVERDUE);
             }
             case TabletService.TAB_ACCOUNTS -> {
                 searchBox = new EditBox(font, left + 140, top + 18, 150, 14, Component.literal("Recherche"));
@@ -360,12 +387,15 @@ public class TabletScreen extends Screen {
                             saveTexts();
                             Network.CHANNEL.sendToServer(TabletPacket.text(TabletOp.NOTE, selected, noteText));
                         }).enabled(sel != null));
+                addRenderableWidget(new AtmButton(left + 10, by2, 110, 18, Component.literal("Relevé (livre)"), AtmButton.DARK,
+                        () -> send(TabletOp.STATEMENT, selected, 0)).enabled(sel != null));
             }
             case TabletService.TAB_CONTACTS -> {
                 addRenderableWidget(new AtmButton(left + 10, by, 70, 18, Component.literal("Traité"), CYAN,
                         () -> send(TabletOp.HANDLE_CONTACT, selected, 0)).enabled(sel != null && !sel.done()));
                 addRenderableWidget(new AtmButton(left + 84, by, 110, 18, Component.literal("Voir le compte"), AtmButton.DARK,
                         () -> view(TabletService.TAB_ACCOUNTS, sel.account(), null)).enabled(sel != null));
+                remindButtons(by2, 10, sel != null && !sel.done());
             }
             case TabletService.TAB_TX -> {
                 addRenderableWidget(new AtmButton(left + 10, by, 100, 18, Component.literal("Voir le compte"), AtmButton.DARK,
@@ -460,7 +490,7 @@ public class TabletScreen extends Screen {
         else renderList(g, mx, my);
 
         if (message != null && !message.isEmpty()) {
-            g.drawString(font, font.plainSubstrByWidth(message, 360), left + 10, top + 228, WARN, false);
+            g.drawString(font, font.plainSubstrByWidth(message, 360), left + 10, top + 238, WARN, false);
         }
         super.render(g, mx, my, pt);
     }
@@ -492,6 +522,7 @@ public class TabletScreen extends Screen {
             case TabletService.TAB_TX -> filterName.isEmpty() ? "Dernières opérations de tous les comptes"
                     : "Opérations de " + filterName;
             case TabletService.TAB_CONTACTS -> openContacts + " demande(s) de rappel à traiter";
+            case TabletService.TAB_REPORT -> "Rapports hebdomadaires de la banque";
             default -> openAlerts + " alerte(s) à traiter";
         };
         g.drawString(font, font.plainSubstrByWidth(head, tab == TabletService.TAB_ACCOUNTS ? 80 : 230), left + (tab == TabletService.TAB_ACCOUNTS ? 296 : 140), top + (tab == TabletService.TAB_ACCOUNTS ? 22 : 24), CYAN, false);
@@ -518,11 +549,11 @@ public class TabletScreen extends Screen {
         if (granting && sel != null && tab == TabletService.TAB_ACCOUNTS) {
             renderGrant(g, sel);
         } else if (sel == null) {
-            g.drawString(font, "Sélectionnez une ligne pour voir le détail.", left + 10, top + 134, TEXT, false);
+            g.drawString(font, "Sélectionnez une ligne pour voir le détail.", left + 10, top + 122, TEXT, false);
         } else {
-            int y = top + 134;
+            int y = top + 122;
             for (String line : sel.detail()) {
-                if (y > top + 205) break;
+                if (y > top + 192) break;
                 g.drawString(font, font.plainSubstrByWidth(line, 360), left + 10, y, TEXT, false);
                 y += 9;
             }
